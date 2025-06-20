@@ -1,12 +1,10 @@
 import sys
-import tempfile
 from pathlib import Path
 from typing import Optional
 
 import click
 
-from .core.downloader import YouTubeDownloader
-from .core.transcriber import WhisperTranscriber
+from .core.service import TranscriptionConfig, transcribe_youtube_video
 
 
 @click.command()
@@ -88,50 +86,44 @@ def main(
     URL: YouTube video URL to transcribe
     """
     try:
-        # Setup temporary directory
-        temp_directory = temp_dir or Path(tempfile.gettempdir())
+        # Create progress callback for verbose output
+        def progress_callback(message: str) -> None:
+            if verbose:
+                click.echo(message)
+        
+        # Create configuration
+        config = TranscriptionConfig(
+            url=url,
+            model_size=model,
+            language=language,
+            audio_format=audio_format,
+            device=device,
+            compute_type=compute_type,
+            align=not no_align,
+            temp_dir=temp_dir,
+            keep_audio=keep_audio
+        )
         
         if verbose:
-            click.echo(f"Using temporary directory: {temp_directory}")
-            click.echo(f"Model: {model}")
-            click.echo(f"Language: {language or 'auto-detect'}")
             click.echo(f"Output format: {format}")
         
-        # Initialize downloader
-        downloader = YouTubeDownloader(output_dir=str(temp_directory))
+        # Run transcription
+        result = transcribe_youtube_video(config, progress_callback)
         
-        # Download audio
-        if verbose:
-            click.echo("Downloading audio...")
+        # Check for errors
+        if not result.success:
+            click.echo(f"Error: {result.error_message}", err=True)
+            sys.exit(1)
         
-        audio_path = downloader.download_audio(url, format=audio_format)
-        
-        if verbose:
-            click.echo(f"Audio downloaded to: {audio_path}")
-        
-        # Initialize transcriber
-        transcriber = WhisperTranscriber(
-            model_size=model,
-            device=device,
-            compute_type=compute_type
-        )
-        
-        # Transcribe audio
-        if verbose:
-            click.echo("Loading model and transcribing...")
-        
-        result = transcriber.transcribe_audio(
-            audio_path,
-            language=language,
-            align=not no_align
-        )
-        
-        if verbose:
-            detected_language = result.get('language', 'unknown')
-            click.echo(f"Detected language: {detected_language}")
-        
-        # Format output
-        transcript = transcriber.format_transcript(result, format_type=format)
+        # Get transcript in requested format
+        if format == "text":
+            transcript = result.transcript_text
+        elif format == "srt":
+            transcript = result.transcript_srt
+        elif format == "vtt":
+            transcript = result.transcript_vtt
+        else:
+            transcript = result.transcript_text
         
         # Output result
         if output:
@@ -141,15 +133,6 @@ def main(
         else:
             click.echo(transcript)
         
-        # Cleanup audio file if requested
-        if not keep_audio:
-            downloader.cleanup(audio_path)
-            if verbose:
-                click.echo("Audio file cleaned up")
-        
-    except Exception as e:
-        click.echo(f"Error: {e}", err=True)
-        sys.exit(1)
     except KeyboardInterrupt:
         click.echo("\nOperation cancelled by user", err=True)
         sys.exit(1)
