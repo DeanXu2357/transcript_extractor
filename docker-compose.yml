@@ -1,0 +1,17 @@
+services:
+  transcript-extractor:
+    build: .
+    image: transcript-extractor:latest
+    volumes:
+      - ./output:/app/output
+      - ./input:/app/input
+    environment:
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    # Example usage: docker compose run --rm transcript-extractor "https://youtube.com/watch?v=xxx" --format srt --output /app/output/transcript.srt
