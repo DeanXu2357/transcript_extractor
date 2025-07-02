@@ -8,6 +8,8 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Optional
 
+import debugpy
+
 from mcp.server.fastmcp import FastMCP
 from mcp.types import Tool
 from mcpauth import MCPAuth
@@ -15,8 +17,12 @@ from mcpauth.config import AuthServerType
 from mcpauth.utils import fetch_server_config
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.routing import Mount
 import uvicorn
+import traceback
+import inspect
+import time
 
 from .core.service import TranscriptionConfig, transcribe_youtube_video
 
@@ -43,8 +49,41 @@ SCOPE_TRANSCRIPT_REALTIME = "transcript:realtime"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("transcript-extractor-mcp")
 
+
+# Request logging middleware
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        start_time = time.time()
+
+        # Log request information
+        logger.info("=== MCP Request Start ===")
+        logger.info(f"Method: {request.method}")
+        logger.info(f"URL: {request.url}")
+        logger.info(f"Headers: {dict(request.headers)}")
+        logger.info(f"Client: {request.client}")
+
+        # Record call stack
+        stack = traceback.extract_stack()
+        logger.info("=== Call Stack Before Response ===")
+        for frame in stack[-10:]:  # Only show last 10 frames
+            logger.info(f"{frame.filename}:{frame.lineno} in {frame.name}")
+            if frame.line:
+                logger.info(f"  {frame.line}")
+
+        response = await call_next(request)
+
+        # Log response information
+        processing_time = time.time() - start_time
+        logger.info(f"=== MCP Request End ===")
+        logger.info(f"Status: {response.status_code}")
+        logger.info(f"Processing time: {processing_time:.3f}s")
+        logger.info("=" * 50)
+
+        return response
+
+
 # Create MCP server
-mcp = FastMCP("transcript-extractor")
+mcp = FastMCP("transcript-extractor", stateless_http=True)
 
 # Server hardware limits configuration
 MODEL_HIERARCHY = ["tiny", "base", "small", "medium", "large-v2", "large-v3"]
@@ -165,7 +204,7 @@ def require_scope(required_scope: str):
     return decorator
 
 
-@require_scope(SCOPE_TRANSCRIPT_REALTIME)
+# @require_scope(SCOPE_TRANSCRIPT_REALTIME)
 @mcp.tool()
 def extract_youtube_transcript(
     url: str,
@@ -320,7 +359,7 @@ def extract_youtube_transcript(
         return {"success": False, "error": str(e)}
 
 
-@require_scope(SCOPE_TRANSCRIPT_READ)
+# @require_scope(SCOPE_TRANSCRIPT_READ)
 @mcp.tool()
 def get_youtube_transcripts(url: str) -> dict[str, Any]:
     """Get existing YouTube transcripts without audio processing.
@@ -348,7 +387,7 @@ def get_youtube_transcripts(url: str) -> dict[str, Any]:
         return {"success": False, "error": str(e), "transcripts": {}, "languages": []}
 
 
-@require_scope(SCOPE_TRANSCRIPT_READ)
+# @require_scope(SCOPE_TRANSCRIPT_READ)
 @mcp.tool()
 def list_whisper_models() -> dict[str, Any]:
     """List available Whisper models for client selection.
@@ -484,10 +523,19 @@ def list_whisper_models() -> dict[str, Any]:
 
 async def main():
     """Run the MCP server with optional authentication."""
+    # Initialize debugpy for remote debugging
+    debug_port = int(os.getenv("DEBUG_PORT", "5678"))
+    if os.getenv("DEBUG_ENABLED", "false").lower() == "true":
+        debugpy.listen(("0.0.0.0", debug_port))
+        logger.info(f"Debugpy listening on port {debug_port}")
+        if os.getenv("DEBUG_WAIT", "false").lower() == "true":
+            logger.info("Waiting for debugger to attach...")
+            debugpy.wait_for_client()
+            logger.info("Debugger attached!")
+
     transport = os.getenv(ENV_MCP_TRANSPORT, TRANSPORT_STDIO)
 
     if transport == TRANSPORT_HTTP:
-        # HTTP transport with Starlette and mcp-auth
         host = os.getenv(ENV_MCP_HOST, "0.0.0.0")
         port = int(os.getenv(ENV_MCP_PORT, "8080"))
 
@@ -496,38 +544,49 @@ async def main():
         from starlette.responses import JSONResponse
         from starlette.routing import Route
 
-        # Health check endpoint
         async def health_check(request):
             return JSONResponse({"status": "ok", "service": "transcript-extractor-mcp"})
 
         if mcp_auth:
-            # Setup authenticated HTTP server with per-tool scope validation
             from starlette.middleware import Middleware
 
-            # Configure bearer auth middleware for JWT token validation
             bearer_auth_params = {
-                "audience": os.getenv(ENV_MCP_JWT_AUDIENCE, "transcript-extractor"),
+                # "audience": os.getenv(ENV_MCP_JWT_AUDIENCE, "transcript-extractor"),
                 "required_scopes": None,  # Handle scopes per-tool
                 "leeway": 60,
+                "show_error_details": True,  # Enable detailed error information
             }
 
             bearer_auth = Middleware(
                 mcp_auth.bearer_auth_middleware("jwt", **bearer_auth_params)
             )
 
+            # Create MCP app with proper lifespan management
+            mcp_app = mcp.streamable_http_app()
+            logger.info(f"MCP app type: {type(mcp_app)}")
+
             app = Starlette(
                 routes=[
                     Route("/health", health_check),
                     mcp_auth.metadata_route(),
                     Mount(
-                        "/mcp", app=mcp.streamable_http_app(), middleware=[bearer_auth]
+                        "/",
+                        app=mcp_app,
+                        middleware=[
+                            bearer_auth,
+                            # Middleware(RequestLoggingMiddleware)
+                        ],
                     ),
-                ]
+                ],
+                lifespan=(
+                    mcp_app.router.lifespan_context
+                    if hasattr(mcp_app.router, "lifespan_context")
+                    else None
+                ),
             )
         else:
-            # HTTP transport requires authentication
             logger.error(
-                "HTTP transport requires authentication. Please configure AUTH_SERVER_URL and AUTH_SERVER_TYPE environment variables."
+                "HTTP transport requires authentication. Please configure AUTH_SERVER_URL environment variables."
             )
             raise RuntimeError(
                 "HTTP transport mode requires MCP Auth configuration. Authentication failed to initialize."
@@ -539,7 +598,6 @@ async def main():
         await server.serve()
 
     else:
-        # Standard stdio transport for local usage
         from mcp.server.stdio import stdio_server
 
         logger.info("Starting MCP stdio server")
@@ -550,7 +608,6 @@ async def main():
 
 
 def main_mcp():
-    """Entry point for MCP server."""
     asyncio.run(main())
 
 
