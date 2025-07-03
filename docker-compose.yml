@@ -19,6 +19,7 @@ services:
   mcp-server:
     build: .
     image: transcript-extractor:latest
+    restart: unless-stopped
     ports:
       - "${MCP_PORT:-8080}:${MCP_PORT:-8080}"
       - "${DEBUG_PORT:-5678}:${DEBUG_PORT:-5678}"
