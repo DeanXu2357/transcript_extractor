@@ -23,7 +23,7 @@ services:
               capabilities: [gpu]
     networks:
       - shared_valkey
-    # Example usage: docker compose run --rm transcript-extractor "https://youtube.com/watch?v=xxx" --format srt --output /app/output/transcript.srt
+    # Example usage: docker compose run --rm transcript-extractor "https://youtube.com/watch?v=xxx" --format srt
 
   mcp-server:
     build: .

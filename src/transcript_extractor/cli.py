@@ -10,11 +10,6 @@ from .core.service import TranscriptionConfig, transcribe_youtube_video
 @click.command()
 @click.argument('url')
 @click.option(
-    '--output', '-o',
-    type=click.Path(path_type=Path),
-    help='Output file path. If not specified, prints to stdout.'
-)
-@click.option(
     '--format', '-f',
     type=click.Choice(['text', 'srt', 'vtt']),
     default='text',
@@ -69,7 +64,6 @@ from .core.service import TranscriptionConfig, transcribe_youtube_video
 )
 def main(
     url: str,
-    output: Optional[Path],
     format: str,
     model: str,
     language: Optional[str],
@@ -126,12 +120,7 @@ def main(
             transcript = result.transcript_text
         
         # Output result
-        if output:
-            output.write_text(transcript, encoding='utf-8')
-            if verbose:
-                click.echo(f"Transcript saved to: {output}")
-        else:
-            click.echo(transcript)
+        click.echo(transcript)
         
     except KeyboardInterrupt:
         click.echo("\nOperation cancelled by user", err=True)

@@ -26,7 +26,7 @@ uv sync
 uv run transcript-extractor "https://youtube.com/watch?v=VIDEO_ID"
 
 # Run with specific options
-uv run transcript-extractor "URL" --format srt --model large-v3 --output transcript.srt
+uv run transcript-extractor "URL" --format srt --model large-v3
 
 # Run MCP server
 uv run transcript-extractor-mcp
