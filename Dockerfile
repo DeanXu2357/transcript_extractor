@@ -24,13 +24,8 @@ COPY . .
 # Install dependencies using uv
 RUN uv sync
 
-# PyTorch official image should have compatible CUDA + cuDNN versions
-
 # Create entrypoint script
 COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh
-
-# Create directories for shared volumes
-RUN mkdir -p /app/input /app/output
 
 ENTRYPOINT ["./entrypoint.sh"]

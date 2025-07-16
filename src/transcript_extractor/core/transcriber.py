@@ -1,6 +1,5 @@
-import os
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, Optional, Union
 import whisperx
 import torch
 
@@ -16,6 +15,7 @@ class WhisperTranscriber:
         model_size: str = "base",
         device: Optional[str] = None,
         compute_type: str = "float16",
+        model_store_dir: Optional[Path] = None,
     ):
         """Initialize the transcriber.
 
@@ -23,48 +23,48 @@ class WhisperTranscriber:
             model_size: Whisper model size (tiny, base, small, medium, large-v2, large-v3)
             device: Device to run on ("cpu", "cuda"). Auto-detect if None.
             compute_type: Compute precision ("float16", "int8", "float32")
+            model_store_dir: Directory to store downloaded models (default: ./models)
         """
         self.model_size = model_size
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.compute_type = compute_type
+        self.model_store_dir = model_store_dir or Path("./models")
+        self.model_store_dir.mkdir(parents=True, exist_ok=True)
+        
+        # WhisperX configuration from environment
+        import os
+        self.batch_size = int(os.getenv("WHISPERX_BATCH_SIZE", "16"))
+        self.compute_type = os.getenv("WHISPERX_COMPUTE_TYPE", compute_type)
+        
+        # Create whisper cache directory
+        self.whisper_cache_dir = self.model_store_dir / "whisperx"
+        self.whisper_cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create alignment cache directory
+        self.alignment_cache_dir = self.model_store_dir / "alignment"
+        self.alignment_cache_dir.mkdir(parents=True, exist_ok=True)
 
-        self.model = None
-        self.align_model = None
-        self.metadata = None
+    def _get_alignment_cache_dir(self, language: str) -> str:
+        """Get alignment cache directory for specific language, creating if needed."""
+        lang_cache_dir = self.alignment_cache_dir / language
+        lang_cache_dir.mkdir(parents=True, exist_ok=True)
+        return str(lang_cache_dir)
 
-    def load_model(self) -> None:
-        """Load Whisper model and alignment model."""
-        if self.model is None:
-            try:
-                self.model = whisperx.load_model(
-                    self.model_size, self.device, compute_type=self.compute_type
-                )
-            except Exception as e:
-                # If loading fails (e.g., libctranslate2 issues), fallback to CPU with float32
-                if "libctranslate2" in str(e) and self.device != "cpu":
-                    print(
-                        f"Warning: GPU model loading failed ({e}), falling back to CPU with float32"
-                    )
-                    self.device = "cpu"
-                    self.compute_type = "float32"
-                    self.model = whisperx.load_model(
-                        self.model_size, self.device, compute_type=self.compute_type
-                    )
-                else:
-                    raise
+
+
+
+
 
     def transcribe_audio(
         self,
         audio_path: Union[str, Path],
         language: Optional[str] = None,
-        align: bool = True,
     ) -> Dict:
         """Transcribe audio file to text.
 
         Args:
             audio_path: Path to audio file
             language: Language code (e.g., "zh", "en"). Auto-detect if None.
-            align: Whether to perform word-level alignment
 
         Returns:
             Dictionary with transcription results including segments and word timings
@@ -73,29 +73,34 @@ class WhisperTranscriber:
             Exception: If transcription fails
         """
         try:
-            self.load_model()
-
+            # Load model
+            model = whisperx.load_model(
+                self.model_size, 
+                self.device, 
+                compute_type=self.compute_type,
+                download_root=str(self.whisper_cache_dir)
+            )
+            
             # Load and transcribe audio
             audio = whisperx.load_audio(str(audio_path))
-            result = self.model.transcribe(audio, language=language)
+            result = model.transcribe(audio, batch_size=self.batch_size, language=language)
 
-            # Perform alignment if requested
-            if align and result["segments"]:
-                # Load alignment model
-                if self.align_model is None or self.metadata is None:
-                    self.align_model, self.metadata = whisperx.load_align_model(
-                        language_code=result["language"], device=self.device
-                    )
+            # Load alignment model and align output
+            align_model, metadata = whisperx.load_align_model(
+                language_code=result["language"], 
+                device=self.device,
+                model_dir=self._get_alignment_cache_dir(result["language"])
+            )
 
-                # Align whisper output
-                result = whisperx.align(
-                    result["segments"],
-                    self.align_model,
-                    self.metadata,
-                    audio,
-                    self.device,
-                    return_char_alignments=False,
-                )
+            # Align whisper output
+            result = whisperx.align(
+                result["segments"],
+                align_model,
+                metadata,
+                audio,
+                self.device,
+                return_char_alignments=False,
+            )
 
             return result
 

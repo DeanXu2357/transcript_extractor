@@ -3,9 +3,8 @@ services:
     build: .
     image: transcript-extractor:latest
     volumes:
-      - ./output:/app/output
-      - ./input:/app/input
       - ${DOWNLOAD_DIR:-./downloads}:/app/downloads
+      - ${MODEL_STORE_DIR:-./models}:/app/models
     environment:
       - PYTHONUNBUFFERED=1
       - VALKEY_HOST=${VALKEY_HOST:-valkey}
@@ -14,6 +13,8 @@ services:
       - VALKEY_PASSWORD=${VALKEY_PASSWORD}
       - VALKEY_USERNAME=${VALKEY_USERNAME}
       - DOWNLOAD_DIR=/app/downloads
+      - MODEL_STORE_DIR=/app/models
+      - WHISPERX_BATCH_SIZE=${WHISPERX_BATCH_SIZE:-16}
     deploy:
       resources:
         reservations:
@@ -33,9 +34,8 @@ services:
       - "${MCP_PORT:-8080}:${MCP_PORT:-8080}"
       - "${DEBUG_PORT:-5678}:${DEBUG_PORT:-5678}"
     volumes:
-      - ./output:/app/output
-      - ./input:/app/input
       - ${DOWNLOAD_DIR:-./downloads}:/app/downloads
+      - ${MODEL_STORE_DIR:-./models}:/app/models
     environment:
       - PYTHONUNBUFFERED=1
       - MCP_TRANSPORT=http
@@ -53,6 +53,9 @@ services:
       - VALKEY_PASSWORD=${VALKEY_PASSWORD}
       - VALKEY_USERNAME=${VALKEY_USERNAME}
       - DOWNLOAD_DIR=/app/downloads
+      - MODEL_STORE_DIR=/app/models
+      - WHISPERX_BATCH_SIZE=${WHISPERX_BATCH_SIZE:-16}
+      - WHISPERX_COMPUTE_TYPE=${WHISPERX_COMPUTE_TYPE:-float16}
     deploy:
       resources:
         reservations:

@@ -85,6 +85,7 @@ docker compose up -d mcp-server
 
 **Environment Variables**:
 - `DOWNLOAD_DIR`: Directory for downloaded audio files (default: ./downloads)
+- `MODEL_STORE_DIR`: Directory for caching Whisper and alignment models (default: ./models)
 - `VALKEY_HOST/PORT/DB`: Redis/Valkey connection settings
 - `MCP_TRANSPORT/HOST/PORT`: MCP server configuration
 - `AUTH_SERVER_URL`: OAuth2 authentication server
@@ -93,7 +94,6 @@ docker compose up -d mcp-server
 
 **Docker Setup**:
 - Multi-service compose with transcript-extractor and mcp-server
-- Volume mounts for input/output/downloads directories
 - GPU support with NVIDIA runtime
 - Health checks and networking configuration
 

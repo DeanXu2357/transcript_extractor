@@ -1,4 +1,3 @@
-import tempfile
 import os
 from pathlib import Path
 from typing import Optional, Callable, Dict, Any
@@ -18,7 +17,7 @@ class TranscriptionConfig:
     language: Optional[str] = None
     audio_format: str = "wav"
     device: Optional[str] = None
-    compute_type: str = "float32"
+    compute_type: str = "float16"
     align: bool = True
     temp_dir: Optional[Path] = None
     keep_audio: bool = False
@@ -50,10 +49,13 @@ class TranscriptionService:
         Args:
             progress_callback: Optional callback function for progress updates
         """
-        self.progress_callback = progress_callback or (lambda x: None)
+        self.progress_callback = progress_callback or (lambda _: None)
 
         self.download_dir = Path(os.getenv("DOWNLOAD_DIR", "./downloads"))
         self.download_dir.mkdir(parents=True, exist_ok=True)
+
+        self.model_store_dir = Path(os.getenv("MODEL_STORE_DIR", "./models"))
+        self.model_store_dir.mkdir(parents=True, exist_ok=True)
 
         self.downloader = YouTubeDownloader(output_dir=str(self.download_dir))
 
@@ -107,6 +109,7 @@ class TranscriptionService:
                 model_size=config.model_size,
                 device=config.device,
                 compute_type=config.compute_type,
+                model_store_dir=self.model_store_dir,
             )
 
             # Transcribe audio
