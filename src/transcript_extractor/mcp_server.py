@@ -211,12 +211,6 @@ def extract_youtube_transcript(
     model: str = "base",
     language: Optional[str] = None,
     format: str = "text",
-    audio_format: str = "wav",
-    keep_audio: bool = False,
-    device: Optional[str] = None,
-    compute_type: str = "float16",
-    align: bool = True,
-    temp_dir: Optional[str] = None,
 ) -> dict[str, Any]:
     """Extract transcript from YouTube video using WhisperX.
 
@@ -230,12 +224,6 @@ def extract_youtube_transcript(
         language: Language code for forced recognition (e.g., zh, en)
                  Leave None for automatic language detection (default: None)
         format: Output format preference - text, srt, or vtt (default: text)
-        audio_format: Audio download format - wav, mp3, or flac (default: wav)
-        keep_audio: Whether to preserve downloaded audio file (default: false)
-        device: Compute device preference - cpu or cuda (default: auto-detect)
-        compute_type: Precision mode - float16, float32, or int8 (default: float16)
-        align: Enable word-level timestamp alignment (default: true)
-        temp_dir: Custom temporary directory path (default: system temp)
 
     Returns:
         Dictionary containing transcript data and metadata:
@@ -266,12 +254,6 @@ def extract_youtube_transcript(
             url=url,
             model_size=actual_model,  # Use validated model
             language=language,
-            audio_format=audio_format,
-            device=device,
-            compute_type=compute_type,
-            align=align,
-            temp_dir=Path(temp_dir) if temp_dir else None,
-            keep_audio=keep_audio,
         )
 
         # Progress callback
@@ -290,9 +272,7 @@ def extract_youtube_transcript(
             )
         else:
             progress_callback(f"✅ Using requested model: {actual_model}")
-        progress_callback(
-            f"Client parameters: device={device}, compute_type={compute_type}, align={align}"
-        )
+        progress_callback("Starting transcription...")
 
         # Run transcription
         result = transcribe_youtube_video(config, progress_callback)
@@ -319,12 +299,6 @@ def extract_youtube_transcript(
             "requested_model": model,
             "language": language,
             "format": format,
-            "audio_format": audio_format,
-            "keep_audio": keep_audio,
-            "device": device,
-            "compute_type": compute_type,
-            "align": align,
-            "temp_dir": temp_dir,
         }
 
         # Server decision information
@@ -390,76 +364,35 @@ def get_youtube_transcripts(url: str) -> dict[str, Any]:
 # @require_scope(SCOPE_TRANSCRIPT_READ)
 @mcp.tool()
 def list_whisper_models() -> dict[str, Any]:
-    """List available Whisper models for client selection.
-
-    This tool helps MCP clients understand the available models and make informed
-    choices based on their speed/accuracy/resource requirements.
+    """List available Whisper models.
 
     Returns:
-        Dictionary containing detailed model information for client decision-making
+        Dictionary containing model information
     """
     models = {
         "tiny": {
-            "parameters": "39M",
-            "vram": "~1GB",
-            "relative_speed": "32x",
-            "accuracy": "⭐",
-            "use_case": "Quick testing, real-time transcription",
-            "pros": ["Fastest", "Lowest memory", "Good for long videos"],
-            "cons": ["Lower accuracy", "May miss complex words"],
+            "speed": "Fastest",
+            "accuracy": "Basic",
         },
         "base": {
-            "parameters": "74M",
-            "vram": "~1GB",
-            "relative_speed": "16x",
-            "accuracy": "⭐⭐",
-            "use_case": "Balanced performance, general purpose",
-            "pros": ["Good speed/accuracy balance", "Reasonable memory usage"],
-            "cons": ["May struggle with accents", "Not best for technical content"],
+            "speed": "Fast",
+            "accuracy": "Good",
         },
         "small": {
-            "parameters": "244M",
-            "vram": "~2GB",
-            "relative_speed": "6x",
-            "accuracy": "⭐⭐⭐",
-            "use_case": "Quality transcription with acceptable speed",
-            "pros": ["Better accuracy", "Handles multiple languages well"],
-            "cons": ["Slower than base", "More memory required"],
+            "speed": "Medium",
+            "accuracy": "Better",
         },
         "medium": {
-            "parameters": "769M",
-            "vram": "~5GB",
-            "relative_speed": "2x",
-            "accuracy": "⭐⭐⭐⭐",
-            "use_case": "High-quality transcription, professional use",
-            "pros": ["High accuracy", "Good with technical terms", "Multi-language"],
-            "cons": ["Significantly slower", "Requires more VRAM"],
+            "speed": "Slow",
+            "accuracy": "High",
         },
         "large-v2": {
-            "parameters": "1550M",
-            "vram": "~10GB",
-            "relative_speed": "1x",
-            "accuracy": "⭐⭐⭐⭐⭐",
-            "use_case": "Best accuracy, research/archival work",
-            "pros": [
-                "Excellent accuracy",
-                "Handles difficult audio",
-                "Multi-language expert",
-            ],
-            "cons": ["Very slow", "High memory requirements"],
+            "speed": "Very Slow",
+            "accuracy": "Excellent",
         },
         "large-v3": {
-            "parameters": "1550M",
-            "vram": "~10GB",
-            "relative_speed": "1x",
-            "accuracy": "⭐⭐⭐⭐⭐",
-            "use_case": "State-of-the-art accuracy, latest model",
-            "pros": [
-                "Best available accuracy",
-                "Latest improvements",
-                "Superior multi-language",
-            ],
-            "cons": ["Very slow", "High memory requirements", "Requires powerful GPU"],
+            "speed": "Very Slow", 
+            "accuracy": "Best",
         },
     }
 
@@ -469,55 +402,11 @@ def list_whisper_models() -> dict[str, Any]:
         k: v for i, (k, v) in enumerate(models.items()) if i <= max_index
     }
 
-    # Filter recommendations based on available models
-    available_model_names = list(available_models.keys())
-    filtered_recommendations = {}
-
-    for scenario, rec in {
-        "quick_preview": {
-            "model": "tiny",
-            "reason": "Fastest processing, good for testing",
-        },
-        "daily_use": {"model": "base", "reason": "Best balance of speed and accuracy"},
-        "high_quality": {
-            "model": "medium",
-            "reason": "Professional quality with reasonable speed",
-        },
-        "best_accuracy": {"model": "large-v3", "reason": "State-of-the-art accuracy"},
-        "limited_memory": {"model": "tiny", "reason": "Only requires 1GB VRAM"},
-        "gpu_accelerated": {"model": "small", "reason": "Good GPU utilization balance"},
-    }.items():
-        if rec["model"] in available_model_names:
-            filtered_recommendations[scenario] = rec
-        else:
-            # Find the best available alternative
-            for alt_model in reversed(available_model_names):
-                if alt_model in available_model_names:
-                    filtered_recommendations[scenario] = {
-                        "model": alt_model,
-                        "reason": f"Best available model on this server (requested {rec['model']} not available)",
-                    }
-                    break
 
     return {
-        "success": True,
-        "message": f"Server allows models up to '{MAX_MODEL}'. Choose based on your requirements.",
-        "server_limits": {
-            "max_model": MAX_MODEL,
-            "available_models": available_model_names,
-            "unavailable_models": [
-                m for m in MODEL_HIERARCHY if m not in available_model_names
-            ],
-        },
-        "models": available_models,  # Only show available models
-        "recommendations": filtered_recommendations,
-        "selection_guide": {
-            "consider_video_length": "Longer videos may benefit from faster models",
-            "consider_audio_quality": "Poor audio quality needs larger models",
-            "consider_language": "Non-English content may need medium+ models",
-            "consider_technical_content": "Technical/medical terms need larger models",
-            "server_constraint": f"This server is limited to models up to '{MAX_MODEL}'",
-        },
+        "available_models": list(available_models.keys()),
+        "models": available_models,
+        "max_model": MAX_MODEL,
     }
 
 
