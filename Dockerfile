@@ -1,5 +1,5 @@
 # Multi-stage build for dependency caching
-FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel as dependencies
+FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel AS dependencies
 
 # Install system dependencies
 ENV DEBIAN_FRONTEND=noninteractive
@@ -27,7 +27,7 @@ COPY uv.lock* ./
 RUN uv sync
 
 # Final stage
-FROM dependencies as final
+FROM dependencies AS final
 
 # Copy the rest of the application code
 COPY . .
