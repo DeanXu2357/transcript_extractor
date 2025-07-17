@@ -2,10 +2,6 @@ from pathlib import Path
 from typing import Dict, Optional, Union
 import whisperx
 import torch
-import whisperx.diarize
-
-torch.backends.cuda.matmul.allow_tf32 = True
-torch.backends.cudnn.allow_tf32 = True
 
 
 class WhisperTranscriber:

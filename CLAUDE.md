@@ -40,8 +40,8 @@ uv run python -m pytest
 
 # Docker usage
 docker compose build
-docker compose run --rm transcript-extractor "URL" --format srt
 docker compose up -d mcp-server
+docker compose exec mcp-server uv run transcript-extractor "URL" --format srt
 ```
 
 ## Architecture

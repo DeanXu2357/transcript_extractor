@@ -3,7 +3,6 @@
 
 import sys
 import tempfile
-import os
 import time
 from pathlib import Path
 
@@ -29,7 +28,9 @@ def get_shared_cache_dir():
     """Get or create shared cache directory for all tests."""
     global SHARED_CACHE_DIR
     if SHARED_CACHE_DIR is None:
-        SHARED_CACHE_DIR = tempfile.mkdtemp(prefix="transcript_test_cache_")
+        import os
+        # Use system configured download directory for consistent environment
+        SHARED_CACHE_DIR = os.getenv("DOWNLOAD_DIR", "/app/downloads")
     return SHARED_CACHE_DIR
 
 def retry_download(downloader, url, format="wav", max_retries=3, delay=2):
@@ -142,11 +143,9 @@ def test_whisper_transcription():
             return
         
         print("    Initializing Whisper transcriber...")
-        # Use smallest model for speed
+        # Use smallest model for speed, with system defaults
         transcriber = WhisperTranscriber(
-            model_size="tiny",
-            device="cpu",  # Force CPU for compatibility
-            compute_type="float32"
+            model_size="tiny"
         )
         
         print("    Running transcription...")
@@ -199,13 +198,11 @@ def test_full_service_integration():
     print("Testing full service integration...")
     
     with tempfile.TemporaryDirectory():
-        # Test configuration
+        # Test configuration with system defaults
         config = TranscriptionConfig(
             url=TEST_URLS["service_test"],
             model_size="tiny",  # Fastest model
             language=None,      # Auto-detect
-            device="cpu",       # Force CPU
-            compute_type="float32",
         )
         
         progress_messages = []
@@ -315,12 +312,10 @@ def main():
         traceback.print_exc()
         return 1
     finally:
-        # Clean up shared cache directory
+        # Note: Using system download directory, no cleanup needed
         global SHARED_CACHE_DIR
-        if SHARED_CACHE_DIR and os.path.exists(SHARED_CACHE_DIR):
-            import shutil
-            shutil.rmtree(SHARED_CACHE_DIR, ignore_errors=True)
-            print(f"Cleaned up shared cache directory: {SHARED_CACHE_DIR}")
+        if SHARED_CACHE_DIR:
+            print(f"Test files remain in system download directory: {SHARED_CACHE_DIR}")
 
 if __name__ == "__main__":
     sys.exit(main())

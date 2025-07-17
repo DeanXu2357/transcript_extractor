@@ -1,32 +1,4 @@
 services:
-  transcript-extractor:
-    build: .
-    image: transcript-extractor:latest
-    volumes:
-      - ${DOWNLOAD_DIR:-./downloads}:/app/downloads
-      - ${MODEL_STORE_DIR:-./models}:/app/models
-    environment:
-      - PYTHONUNBUFFERED=1
-      - VALKEY_HOST=${VALKEY_HOST:-valkey}
-      - VALKEY_PORT=${VALKEY_PORT:-6379}
-      - VALKEY_DB=${VALKEY_DB:-1}
-      - VALKEY_PASSWORD=${VALKEY_PASSWORD}
-      - VALKEY_USERNAME=${VALKEY_USERNAME}
-      - DOWNLOAD_DIR=/app/downloads
-      - MODEL_STORE_DIR=/app/models
-      - WHISPERX_BATCH_SIZE=${WHISPERX_BATCH_SIZE:-16}
-      - HF_TOKEN=${HF_TOKEN}
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    networks:
-      - shared_valkey
-    # Example usage: docker compose run --rm transcript-extractor "https://youtube.com/watch?v=xxx" --format srt
-
   mcp-server:
     build: .
     image: transcript-extractor:latest

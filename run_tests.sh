@@ -4,8 +4,9 @@
 
 set -e
 
-echo "🔧 Building Docker container..."
-docker compose build
+echo ""
+echo "🚀 Starting MCP server container..."
+docker compose up -d mcp-server --build --force-recreate
 
 echo ""
 echo "🧪 Running integration tests..."
@@ -16,18 +17,19 @@ echo "  3. Whisper transcription"
 echo "  4. Full service integration"
 echo ""
 
-# Run integration tests by overriding entrypoint
-docker compose run --rm --entrypoint="" transcript-extractor sh -c "cd /app && uv run python test_integration.py"
+# Run integration tests in the running mcp-server container
+docker compose exec mcp-server sh -c "cd /app && uv run python test_integration.py"
 
 echo ""
 echo "✅ Test completed!"
 echo ""
 echo "To run individual components:"
 echo "  # Test CLI directly"
-echo "  docker-compose run --rm transcript-extractor \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\" --format text"
+echo "  docker compose exec mcp-server uv run transcript-extractor \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\" --format text"
 echo ""
 echo "  # Test with SRT output"
-echo "  docker-compose run --rm transcript-extractor \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\" --format srt"
+echo "  docker compose exec mcp-server uv run transcript-extractor \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\" --format srt"
 echo ""
 echo "  # Quick test with tiny model"
-echo "  docker-compose run --rm transcript-extractor \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\" --model tiny --format text"
+echo "  docker compose exec mcp-server uv run transcript-extractor \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\" --model tiny --format text"
+echo ""

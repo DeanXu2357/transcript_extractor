@@ -24,15 +24,17 @@ This project combines the following technologies:
 ### 1. Command Line Mode
 
 #### Docker Container Execution
-```bash
-# Build container
-docker compose build
 
-# Pure transcript output (recommended)
-docker compose run --rm --quiet transcript-extractor "https://youtube.com/watch?v=VIDEO_ID" --model large-v3
+```bash
+# Build and start MCP server container
+docker compose build
+docker compose up -d mcp-server
+
+# Execute CLI commands in running container (reuses models for efficiency)
+docker compose exec mcp-server uv run transcript-extractor "https://youtube.com/watch?v=VIDEO_ID" --model large-v3
 
 # Output to file
-docker compose run --rm transcript-extractor "https://youtube.com/watch?v=VIDEO_ID" \
+docker compose exec mcp-server uv run transcript-extractor "https://youtube.com/watch?v=VIDEO_ID" \
   --format srt \
   --model large-v3 \
   --output /app/output/transcript.srt
