@@ -36,11 +36,6 @@ from .core.service import TranscriptionConfig, transcribe_youtube_video
     help='Compute precision (default: float16)'
 )
 @click.option(
-    '--no-align',
-    is_flag=True,
-    help='Skip word-level alignment for faster processing'
-)
-@click.option(
     '--diarize',
     is_flag=True,
     help='Enable speaker diarization (requires HF_TOKEN environment variable)'
@@ -72,7 +67,6 @@ def main(
     language: Optional[str],
     device: Optional[str],
     compute_type: str,
-    no_align: bool,
     diarize: bool,
     num_speakers: Optional[int],
     min_speakers: Optional[int],
@@ -96,7 +90,6 @@ def main(
             language=language,
             device=device,
             compute_type=compute_type,
-            align=not no_align,
             diarize=diarize,
             num_speakers=num_speakers,
             min_speakers=min_speakers,

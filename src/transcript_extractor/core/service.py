@@ -17,7 +17,6 @@ class TranscriptionConfig:
     language: Optional[str] = None
     device: Optional[str] = None
     compute_type: str = "float16"
-    align: bool = True
     diarize: bool = False
     num_speakers: Optional[int] = None
     min_speakers: Optional[int] = None

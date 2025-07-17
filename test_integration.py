@@ -126,7 +126,6 @@ def test_whisper_transcription():
             result = transcriber.transcribe_audio(
                 audio_path,
                 language=None,  # Auto-detect
-                align=False     # Skip alignment for speed
             )
             
             if result and 'segments' in result:
@@ -179,7 +178,6 @@ def test_full_service_integration():
             language=None,      # Auto-detect
             device="cpu",       # Force CPU
             compute_type="float32",
-            align=False,        # Skip alignment for speed
         )
         
         progress_messages = []

@@ -44,7 +44,6 @@ docker compose run --rm transcript-extractor "https://youtube.com/watch?v=VIDEO_
 - `--language, -l`: Language code (zh, en, etc.)
 - `--device`: Device to run transcription on (cpu, cuda)
 - `--compute-type`: Compute precision (float16, float32, int8)
-- `--no-align`: Skip word-level alignment for faster processing
 - `--diarize`: Enable speaker diarization (requires HF_TOKEN)
 - `--num-speakers`: Number of speakers (if known)
 - `--min-speakers`: Minimum number of speakers
