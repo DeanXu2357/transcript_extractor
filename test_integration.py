@@ -177,12 +177,9 @@ def test_full_service_integration():
             url=TEST_URLS["short_english"],
             model_size="tiny",  # Fastest model
             language=None,      # Auto-detect
-            audio_format="wav",
             device="cpu",       # Force CPU
             compute_type="float32",
             align=False,        # Skip alignment for speed
-            temp_dir=Path(temp_dir),
-            keep_audio=True     # Keep for inspection
         )
         
         progress_messages = []

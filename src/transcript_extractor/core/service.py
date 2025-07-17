@@ -15,12 +15,9 @@ class TranscriptionConfig:
     url: str
     model_size: str = "base"
     language: Optional[str] = None
-    audio_format: str = "wav"
     device: Optional[str] = None
     compute_type: str = "float16"
     align: bool = True
-    temp_dir: Optional[Path] = None
-    keep_audio: bool = False
     diarize: bool = False
     num_speakers: Optional[int] = None
     min_speakers: Optional[int] = None
@@ -35,7 +32,6 @@ class TranscriptionResult:
     transcript_srt: str
     transcript_vtt: str
     raw_result: Dict[str, Any]
-    audio_path: Optional[Path]
     detected_language: str
     youtube_transcripts: Dict[
         str, str
@@ -104,7 +100,7 @@ class TranscriptionService:
             # Download audio
             self.progress_callback("Downloading audio...")
             audio_path = self.downloader.download_audio(
-                config.url, format=config.audio_format
+                config.url, format="wav"
             )
             self.progress_callback(f"Audio downloaded to: {audio_path}")
 
@@ -146,7 +142,6 @@ class TranscriptionService:
                 transcript_srt=transcript_srt,
                 transcript_vtt=transcript_vtt,
                 raw_result=raw_result,
-                audio_path=audio_path if config.keep_audio else None,
                 detected_language=detected_language,
                 youtube_transcripts=youtube_transcripts,
                 success=True,
@@ -158,7 +153,6 @@ class TranscriptionService:
                 transcript_srt="",
                 transcript_vtt="",
                 raw_result={},
-                audio_path=None,
                 detected_language="unknown",
                 youtube_transcripts={},
                 success=False,

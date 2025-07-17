@@ -13,29 +13,15 @@ This project combines the following technologies:
 ## Features
 
 - Support for multiple output formats (text, srt, vtt)
-- Multiple Whisper model options (tiny to large-v3)
-- Containerized deployment
-- MCP server mode (streamable HTTP protocol)
+- Multiple Whisper model options (tiny, base, small, medium, large-v2, large-v3)
+- Speaker diarization support with configurable speaker count
+- Redis/Valkey caching for downloaded audio files
+- Containerized deployment with GPU support
+- MCP server mode with HTTP transport and OAuth2 authentication
 
 ## Usage
 
 ### 1. Command Line Mode
-
-#### Local Execution
-```bash
-# Install dependencies
-uv sync
-
-# Basic usage
-uv run transcript-extractor "https://youtube.com/watch?v=VIDEO_ID"
-
-# Specify output format and model
-uv run transcript-extractor "https://youtube.com/watch?v=VIDEO_ID" \
-  --format srt \
-  --model large-v3 \
-  --language zh \
-  --output output.srt
-```
 
 #### Docker Container Execution
 ```bash
@@ -56,7 +42,13 @@ docker compose run --rm transcript-extractor "https://youtube.com/watch?v=VIDEO_
 - `--format, -f`: Output format (text, srt, vtt)
 - `--model, -m`: Model size (tiny, base, small, medium, large-v2, large-v3)
 - `--language, -l`: Language code (zh, en, etc.)
-- `--output, -o`: Output file path
+- `--device`: Device to run transcription on (cpu, cuda)
+- `--compute-type`: Compute precision (float16, float32, int8)
+- `--no-align`: Skip word-level alignment for faster processing
+- `--diarize`: Enable speaker diarization (requires HF_TOKEN)
+- `--num-speakers`: Number of speakers (if known)
+- `--min-speakers`: Minimum number of speakers
+- `--max-speakers`: Maximum number of speakers
 - `--verbose, -v`: Show processing progress
 
 ### 2. MCP Server Mode
@@ -76,11 +68,23 @@ docker compose down mcp-server
 ```
 
 #### Environment Variables
+**MCP Server Configuration:**
 - `MCP_TRANSPORT=http`: Use HTTP transport
 - `MCP_HOST`: Server host (default: 0.0.0.0)
 - `MCP_PORT`: Server port (default: 8080)
-- `AUTH_SERVER_URL`: Authorization server URL
+- `AUTH_SERVER_URL`: OAuth2 authentication server URL
 - `MCP_JWT_AUDIENCE`: JWT audience (default: transcript-extractor)
+- `MAX_WHISPER_MODEL`: Maximum allowed model (server hardware limits)
+
+**Storage and Caching:**
+- `DOWNLOAD_DIR`: Directory for downloaded audio files (default: ./downloads)
+- `MODEL_STORE_DIR`: Directory for caching Whisper models (default: ./models)
+- `VALKEY_HOST/PORT/DB`: Redis/Valkey connection settings
+- `VALKEY_PASSWORD/USERNAME`: Redis/Valkey authentication
+
+**Additional Features:**
+- `HF_TOKEN`: HuggingFace token (required for speaker diarization)
+- `DEBUG_ENABLED/PORT`: Remote debugging configuration
 
 ## Output File Location
 
@@ -106,8 +110,11 @@ uv sync
 # Run tests
 uv run python -m pytest
 
-# Local development execution
-uv run python main.py
+# Local CLI execution
+uv run transcript-extractor "https://youtube.com/watch?v=VIDEO_ID"
+
+# Local MCP server
+uv run transcript-extractor-mcp
 ```
 
 ---

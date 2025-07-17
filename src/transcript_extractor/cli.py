@@ -1,5 +1,4 @@
 import sys
-from pathlib import Path
 from typing import Optional
 
 import click
@@ -24,22 +23,6 @@ from .core.service import TranscriptionConfig, transcribe_youtube_video
 @click.option(
     '--language', '-l',
     help='Language code (e.g., zh, en). Auto-detect if not specified.'
-)
-@click.option(
-    '--audio-format',
-    type=click.Choice(['wav', 'mp3', 'flac'], case_sensitive=False),
-    default='wav',
-    help='Audio format for download (default: wav)'
-)
-@click.option(
-    '--keep-audio',
-    is_flag=True,
-    help='Keep downloaded audio file after transcription'
-)
-@click.option(
-    '--temp-dir',
-    type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
-    help='Temporary directory for audio files'
 )
 @click.option(
     '--device',
@@ -87,9 +70,6 @@ def main(
     format: str,
     model: str,
     language: Optional[str],
-    audio_format: str,
-    keep_audio: bool,
-    temp_dir: Optional[Path],
     device: Optional[str],
     compute_type: str,
     no_align: bool,
@@ -114,12 +94,9 @@ def main(
             url=url,
             model_size=model,
             language=language,
-            audio_format=audio_format,
             device=device,
             compute_type=compute_type,
             align=not no_align,
-            temp_dir=temp_dir,
-            keep_audio=keep_audio,
             diarize=diarize,
             num_speakers=num_speakers,
             min_speakers=min_speakers,

@@ -5,23 +5,19 @@ import asyncio
 import logging
 import os
 from functools import wraps
-from pathlib import Path
 from typing import Any, Optional
 
 import debugpy
 
 from mcp.server.fastmcp import FastMCP
-from mcp.types import Tool
 from mcpauth import MCPAuth
 from mcpauth.config import AuthServerType
 from mcpauth.utils import fetch_server_config
 from starlette.applications import Starlette
-from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.routing import Mount
 import uvicorn
 import traceback
-import inspect
 import time
 
 from .core.service import TranscriptionConfig, transcribe_youtube_video
@@ -237,7 +233,6 @@ def extract_youtube_transcript(
             "processing_time": float,
             "all_formats": {"text": str, "srt": str, "vtt": str},
             "youtube_transcripts": dict,
-            "audio_path": str (if keep_audio=true),
             "client_params": dict (echo of client parameters)
         }
     """
