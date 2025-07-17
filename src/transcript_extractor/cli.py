@@ -16,7 +16,7 @@ from .core.service import TranscriptionConfig, transcribe_youtube_video
 )
 @click.option(
     '--model', '-m',
-    type=click.Choice(['tiny', 'base', 'small', 'medium', 'large-v2', 'large-v3']),
+    type=click.Choice(['tiny', 'base', 'small', 'medium', 'large-v2', 'large-v3', 'breeze-asr-25']),
     default='base',
     help='What model to use (default: base)'
 )
@@ -86,7 +86,7 @@ def main(
         # Create configuration
         config = TranscriptionConfig(
             url=url,
-            model_size=model,
+            model_name=model,
             language=language,
             device=device,
             compute_type=compute_type,

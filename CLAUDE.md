@@ -28,6 +28,9 @@ uv run transcript-extractor "https://youtube.com/watch?v=VIDEO_ID"
 # Run with specific options
 uv run transcript-extractor "URL" --format srt --model large-v3
 
+# Use Breeze ASR 25 for Mandarin-English code-switching
+uv run transcript-extractor "URL" --format srt --model breeze-asr-25
+
 # Run with speaker diarization
 uv run transcript-extractor "URL" --diarize --format srt
 
@@ -61,8 +64,9 @@ docker compose exec mcp-server uv run transcript-extractor "URL" --format srt
 - Handles file cleanup and temporary directory management
 
 **Transcriber** (`src/transcript_extractor/core/transcriber.py`):
-- `WhisperTranscriber`: WhisperX wrapper with model loading and format conversion
-- Supports all Whisper model sizes (tiny to large-v3)
+- `WhisperTranscriber`: Supports multiple transcription models
+- WhisperX models: tiny, base, small, medium, large-v2, large-v3
+- Breeze ASR 25: Optimized for Mandarin-English code-switching
 - Handles device selection (CPU/CUDA) and compute precision
 - Generates text, SRT, and VTT output formats with proper timing
 
@@ -75,7 +79,7 @@ docker compose exec mcp-server uv run transcript-extractor "URL" --format srt
 
 **CLI Mode** (`src/transcript_extractor/cli.py`):
 - Single command interface with comprehensive options
-- Supports all model sizes, languages, and output formats
+- Supports all model names, languages, and output formats
 - Progress reporting with verbose mode
 
 **MCP Server Mode** (`src/transcript_extractor/mcp_server.py`):
@@ -88,13 +92,13 @@ docker compose exec mcp-server uv run transcript-extractor "URL" --format srt
 
 **Environment Variables**:
 - `DOWNLOAD_DIR`: Directory for downloaded audio files (default: ./downloads)
-- `MODEL_STORE_DIR`: Directory for caching Whisper and alignment models (default: ./models)
+- `MODEL_STORE_DIR`: Directory for caching models (WhisperX, Breeze ASR 25, alignment models) (default: ./models)
 - `VALKEY_HOST/PORT/DB`: Redis/Valkey connection settings
 - `MCP_TRANSPORT/HOST/PORT`: MCP server configuration
 - `AUTH_SERVER_URL`: OAuth2 authentication server
-- `MAX_WHISPER_MODEL`: Server hardware limits for model selection
+- `MAX_WHISPER_MODEL`: Server hardware limits for model selection (Note: Breeze ASR 25 bypasses this limit)
 - `DEBUG_ENABLED/PORT`: Remote debugging configuration
-- `HF_TOKEN`: HuggingFace authentication token (required for speaker diarization)
+- `HF_TOKEN`: HuggingFace authentication token (required for speaker diarization, not supported with Breeze ASR 25)
 
 **Docker Setup**:
 - Multi-service compose with transcript-extractor and mcp-server

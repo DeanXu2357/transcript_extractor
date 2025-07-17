@@ -13,7 +13,7 @@ This project combines the following technologies:
 ## Features
 
 - Support for multiple output formats (text, srt, vtt)
-- Multiple Whisper model options (tiny, base, small, medium, large-v2, large-v3)
+- Multiple model options (tiny, base, small, medium, large-v2, large-v3, breeze-asr-25)
 - Speaker diarization support with configurable speaker count
 - Redis/Valkey caching for downloaded audio files
 - Containerized deployment with GPU support
@@ -33,6 +33,9 @@ docker compose up -d mcp-server
 # Execute CLI commands in running container (reuses models for efficiency)
 docker compose exec mcp-server uv run transcript-extractor "https://youtube.com/watch?v=VIDEO_ID" --model large-v3
 
+# Use Breeze ASR 25 for Mandarin-English code-switching
+docker compose exec mcp-server uv run transcript-extractor "https://youtube.com/watch?v=VIDEO_ID" --model breeze-asr-25
+
 # Output to file
 docker compose exec mcp-server uv run transcript-extractor "https://youtube.com/watch?v=VIDEO_ID" \
   --format srt \
@@ -42,7 +45,7 @@ docker compose exec mcp-server uv run transcript-extractor "https://youtube.com/
 
 #### Parameters
 - `--format, -f`: Output format (text, srt, vtt)
-- `--model, -m`: Model size (tiny, base, small, medium, large-v2, large-v3)
+- `--model, -m`: Model name (tiny, base, small, medium, large-v2, large-v3, breeze-asr-25)
 - `--language, -l`: Language code (zh, en, etc.)
 - `--device`: Device to run transcription on (cpu, cuda)
 - `--compute-type`: Compute precision (float16, float32, int8)

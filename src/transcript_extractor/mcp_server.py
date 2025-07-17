@@ -82,7 +82,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 mcp = FastMCP("transcript-extractor", stateless_http=True)
 
 # Server hardware limits configuration
-MODEL_HIERARCHY = ["tiny", "base", "small", "medium", "large-v2", "large-v3"]
+MODEL_HIERARCHY = ["tiny", "base", "small", "medium", "large-v2", "large-v3", "breeze-asr-25"]
 MAX_MODEL = os.getenv(ENV_MAX_WHISPER_MODEL, "large-v3")  # Default to allow all models
 
 
@@ -249,7 +249,7 @@ def extract_youtube_transcript(
         # Create configuration
         config = TranscriptionConfig(
             url=url,
-            model_size=actual_model,  # Use validated model
+            model_name=actual_model,  # Use validated model
             language=language,
             diarize=diarize,
         )

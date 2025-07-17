@@ -13,7 +13,7 @@ class TranscriptionConfig:
     """Configuration for transcription service."""
 
     url: str
-    model_size: str = "base"
+    model_name: str = "base"
     language: Optional[str] = None
     device: Optional[str] = None
     compute_type: str = "float16"
@@ -83,7 +83,7 @@ class TranscriptionService:
         """
         try:
             self.progress_callback(f"Using download directory: {self.download_dir}")
-            self.progress_callback(f"Model: {config.model_size}")
+            self.progress_callback(f"Model: {config.model_name}")
             self.progress_callback(f"Language: {config.language or 'auto-detect'}")
 
             # Get YouTube transcripts first
@@ -105,7 +105,7 @@ class TranscriptionService:
 
             # Initialize transcriber
             transcriber = WhisperTranscriber(
-                model_size=config.model_size,
+                model_name=config.model_name,
                 device=config.device,
                 compute_type=config.compute_type,
                 model_store_dir=self.model_store_dir,
