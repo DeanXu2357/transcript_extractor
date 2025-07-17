@@ -101,7 +101,7 @@ class WhisperTranscriber:
 
             # Store language before alignment
             detected_language = result["language"]
-            
+
             # Align whisper output
             result = whisperx.align(
                 result["segments"],
@@ -111,7 +111,7 @@ class WhisperTranscriber:
                 self.device,
                 return_char_alignments=False,
             )
-            
+
             # Preserve language information
             result["language"] = detected_language
 
@@ -124,7 +124,7 @@ class WhisperTranscriber:
                     diarize_model = whisperx.diarize.DiarizationPipeline(
                         use_auth_token=hf_token, device=self.device
                     )
-                    
+
                     # Build parameters for diarization
                     diarize_params = {}
                     if num_speakers is not None:
@@ -133,9 +133,11 @@ class WhisperTranscriber:
                         diarize_params["min_speakers"] = min_speakers
                     if max_speakers is not None:
                         diarize_params["max_speakers"] = max_speakers
-                    
+
                     diarize_segments = diarize_model(audio, **diarize_params)
-                    result = whisperx.assign_word_speakers(diarize_segments, result, fill_nearest=True)
+                    result = whisperx.assign_word_speakers(
+                        diarize_segments, result, fill_nearest=False
+                    )
 
                     # Debug output to show structure
                     print("=== DIARIZE SEGMENTS ===")
@@ -175,7 +177,7 @@ class WhisperTranscriber:
         """Format as plain text."""
         segments = result.get("segments", [])
         lines = []
-        
+
         for segment in segments:
             # Check if words have speaker information
             words = segment.get("words", [])
@@ -183,22 +185,26 @@ class WhisperTranscriber:
                 # Group words by speaker
                 current_speaker = None
                 current_text = []
-                
+
                 for word in words:
                     word_speaker = word.get("speaker")
                     if word_speaker != current_speaker:
                         # Speaker changed, output previous group
                         if current_speaker and current_text:
-                            lines.append(f"[{current_speaker}] {' '.join(current_text).strip()}")
+                            lines.append(
+                                f"[{current_speaker}] {' '.join(current_text).strip()}"
+                            )
                         current_speaker = word_speaker
                         current_text = []
-                    
+
                     if "word" in word:
                         current_text.append(word["word"])
-                
+
                 # Output final group
                 if current_speaker and current_text:
-                    lines.append(f"[{current_speaker}] {' '.join(current_text).strip()}")
+                    lines.append(
+                        f"[{current_speaker}] {' '.join(current_text).strip()}"
+                    )
             else:
                 # Fallback to segment-level speaker or no speaker
                 text = segment["text"].strip()
@@ -206,7 +212,7 @@ class WhisperTranscriber:
                     lines.append(f"[{segment['speaker']}] {text}")
                 else:
                     lines.append(text)
-        
+
         return "\n".join(lines)
 
     def _format_srt(self, result: Dict) -> str:
@@ -223,36 +229,38 @@ class WhisperTranscriber:
                 current_speaker = None
                 current_text = []
                 current_start = segment["start"]
-                
+
                 for i, word in enumerate(words):
                     word_speaker = word.get("speaker")
                     if word_speaker != current_speaker:
                         # Speaker changed, create subtitle for previous group
                         if current_speaker and current_text:
-                            word_end = words[i-1].get("end", current_start + 1)
+                            word_end = words[i - 1].get("end", current_start + 1)
                             start_time = self._seconds_to_srt_time(current_start)
                             end_time = self._seconds_to_srt_time(word_end)
-                            text = f"[{current_speaker}] {' '.join(current_text).strip()}"
-                            
+                            text = (
+                                f"[{current_speaker}] {' '.join(current_text).strip()}"
+                            )
+
                             srt_content.append(f"{subtitle_index}")
                             srt_content.append(f"{start_time} --> {end_time}")
                             srt_content.append(text)
                             srt_content.append("")
                             subtitle_index += 1
-                        
+
                         current_speaker = word_speaker
                         current_text = []
                         current_start = word.get("start", current_start)
-                    
+
                     if "word" in word:
                         current_text.append(word["word"])
-                
+
                 # Output final group in this segment
                 if current_speaker and current_text:
                     end_time = self._seconds_to_srt_time(segment["end"])
                     start_time = self._seconds_to_srt_time(current_start)
                     text = f"[{current_speaker}] {' '.join(current_text).strip()}"
-                    
+
                     srt_content.append(f"{subtitle_index}")
                     srt_content.append(f"{start_time} --> {end_time}")
                     srt_content.append(text)
@@ -263,7 +271,7 @@ class WhisperTranscriber:
                 start_time = self._seconds_to_srt_time(segment["start"])
                 end_time = self._seconds_to_srt_time(segment["end"])
                 text = segment["text"].strip()
-                
+
                 if "speaker" in segment:
                     text = f"[{segment['speaker']}] {text}"
 
@@ -288,34 +296,36 @@ class WhisperTranscriber:
                 current_speaker = None
                 current_text = []
                 current_start = segment["start"]
-                
+
                 for i, word in enumerate(words):
                     word_speaker = word.get("speaker")
                     if word_speaker != current_speaker:
                         # Speaker changed, create subtitle for previous group
                         if current_speaker and current_text:
-                            word_end = words[i-1].get("end", current_start + 1)
+                            word_end = words[i - 1].get("end", current_start + 1)
                             start_time = self._seconds_to_vtt_time(current_start)
                             end_time = self._seconds_to_vtt_time(word_end)
-                            text = f"[{current_speaker}] {' '.join(current_text).strip()}"
-                            
+                            text = (
+                                f"[{current_speaker}] {' '.join(current_text).strip()}"
+                            )
+
                             vtt_content.append(f"{start_time} --> {end_time}")
                             vtt_content.append(text)
                             vtt_content.append("")
-                        
+
                         current_speaker = word_speaker
                         current_text = []
                         current_start = word.get("start", current_start)
-                    
+
                     if "word" in word:
                         current_text.append(word["word"])
-                
+
                 # Output final group in this segment
                 if current_speaker and current_text:
                     end_time = self._seconds_to_vtt_time(segment["end"])
                     start_time = self._seconds_to_vtt_time(current_start)
                     text = f"[{current_speaker}] {' '.join(current_text).strip()}"
-                    
+
                     vtt_content.append(f"{start_time} --> {end_time}")
                     vtt_content.append(text)
                     vtt_content.append("")
@@ -324,7 +334,7 @@ class WhisperTranscriber:
                 start_time = self._seconds_to_vtt_time(segment["start"])
                 end_time = self._seconds_to_vtt_time(segment["end"])
                 text = segment["text"].strip()
-                
+
                 if "speaker" in segment:
                     text = f"[{segment['speaker']}] {text}"
 
