@@ -211,6 +211,7 @@ def extract_youtube_transcript(
     model: str = "base",
     language: Optional[str] = None,
     format: str = "text",
+    diarize: bool = False,
 ) -> dict[str, Any]:
     """Extract transcript from YouTube video using WhisperX.
 
@@ -224,6 +225,7 @@ def extract_youtube_transcript(
         language: Language code for forced recognition (e.g., zh, en)
                  Leave None for automatic language detection (default: None)
         format: Output format preference - text, srt, or vtt (default: text)
+        diarize: Enable speaker diarization to identify different speakers (default: false)
 
     Returns:
         Dictionary containing transcript data and metadata:
@@ -254,6 +256,7 @@ def extract_youtube_transcript(
             url=url,
             model_size=actual_model,  # Use validated model
             language=language,
+            diarize=diarize,
         )
 
         # Progress callback
@@ -299,6 +302,7 @@ def extract_youtube_transcript(
             "requested_model": model,
             "language": language,
             "format": format,
+            "diarize": diarize,
         }
 
         # Server decision information

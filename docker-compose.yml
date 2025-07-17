@@ -15,6 +15,7 @@ services:
       - DOWNLOAD_DIR=/app/downloads
       - MODEL_STORE_DIR=/app/models
       - WHISPERX_BATCH_SIZE=${WHISPERX_BATCH_SIZE:-16}
+      - HF_TOKEN=${HF_TOKEN}
     deploy:
       resources:
         reservations:
@@ -56,6 +57,7 @@ services:
       - MODEL_STORE_DIR=/app/models
       - WHISPERX_BATCH_SIZE=${WHISPERX_BATCH_SIZE:-16}
       - WHISPERX_COMPUTE_TYPE=${WHISPERX_COMPUTE_TYPE:-float16}
+      - HF_TOKEN=${HF_TOKEN}
     deploy:
       resources:
         reservations:

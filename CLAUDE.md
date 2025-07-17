@@ -28,6 +28,9 @@ uv run transcript-extractor "https://youtube.com/watch?v=VIDEO_ID"
 # Run with specific options
 uv run transcript-extractor "URL" --format srt --model large-v3
 
+# Run with speaker diarization
+uv run transcript-extractor "URL" --diarize --format srt
+
 # Run MCP server
 uv run transcript-extractor-mcp
 
@@ -91,6 +94,7 @@ docker compose up -d mcp-server
 - `AUTH_SERVER_URL`: OAuth2 authentication server
 - `MAX_WHISPER_MODEL`: Server hardware limits for model selection
 - `DEBUG_ENABLED/PORT`: Remote debugging configuration
+- `HF_TOKEN`: HuggingFace authentication token (required for speaker diarization)
 
 **Docker Setup**:
 - Multi-service compose with transcript-extractor and mcp-server

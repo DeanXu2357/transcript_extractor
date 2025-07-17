@@ -21,6 +21,10 @@ class TranscriptionConfig:
     align: bool = True
     temp_dir: Optional[Path] = None
     keep_audio: bool = False
+    diarize: bool = False
+    num_speakers: Optional[int] = None
+    min_speakers: Optional[int] = None
+    max_speakers: Optional[int] = None
 
 
 @dataclass
@@ -115,7 +119,12 @@ class TranscriptionService:
             # Transcribe audio
             self.progress_callback("Loading model and transcribing...")
             raw_result = transcriber.transcribe_audio(
-                audio_path, language=config.language, align=config.align
+                audio_path, 
+                language=config.language, 
+                diarize=config.diarize,
+                num_speakers=config.num_speakers,
+                min_speakers=config.min_speakers,
+                max_speakers=config.max_speakers
             )
 
             detected_language = raw_result.get("language", "unknown")

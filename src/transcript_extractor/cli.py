@@ -58,6 +58,26 @@ from .core.service import TranscriptionConfig, transcribe_youtube_video
     help='Skip word-level alignment for faster processing'
 )
 @click.option(
+    '--diarize',
+    is_flag=True,
+    help='Enable speaker diarization (requires HF_TOKEN environment variable)'
+)
+@click.option(
+    '--num-speakers',
+    type=int,
+    help='Number of speakers (if known, improves diarization accuracy)'
+)
+@click.option(
+    '--min-speakers',
+    type=int,
+    help='Minimum number of speakers'
+)
+@click.option(
+    '--max-speakers',
+    type=int,
+    help='Maximum number of speakers'
+)
+@click.option(
     '--verbose', '-v',
     is_flag=True,
     help='Enable verbose output'
@@ -73,6 +93,10 @@ def main(
     device: Optional[str],
     compute_type: str,
     no_align: bool,
+    diarize: bool,
+    num_speakers: Optional[int],
+    min_speakers: Optional[int],
+    max_speakers: Optional[int],
     verbose: bool
 ) -> None:
     """Extract transcript from YouTube video.
@@ -95,7 +119,11 @@ def main(
             compute_type=compute_type,
             align=not no_align,
             temp_dir=temp_dir,
-            keep_audio=keep_audio
+            keep_audio=keep_audio,
+            diarize=diarize,
+            num_speakers=num_speakers,
+            min_speakers=min_speakers,
+            max_speakers=max_speakers
         )
         
         if verbose:
