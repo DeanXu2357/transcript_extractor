@@ -1,4 +1,5 @@
-FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel
+# Multi-stage build for dependency caching
+FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel AS dependencies
 
 # Install system dependencies
 ENV DEBIAN_FRONTEND=noninteractive
@@ -18,19 +19,20 @@ ENV UV_PYTHON="3.11"
 # Create working directory
 WORKDIR /app
 
-# Copy project files
-COPY . .
+# Copy only dependency files (changes less frequently)
+COPY pyproject.toml ./
+COPY uv.lock* ./
 
-# Install dependencies using uv
+# Install dependencies - this layer will be cached
 RUN uv sync
 
-# PyTorch official image should have compatible CUDA + cuDNN versions
+# Final stage
+FROM dependencies AS final
+
+# Copy the rest of the application code
+COPY . .
 
 # Create entrypoint script
-COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh
-
-# Create directories for shared volumes
-RUN mkdir -p /app/input /app/output
 
 ENTRYPOINT ["./entrypoint.sh"]

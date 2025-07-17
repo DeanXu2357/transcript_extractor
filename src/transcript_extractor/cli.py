@@ -10,11 +10,6 @@ from .core.service import TranscriptionConfig, transcribe_youtube_video
 @click.command()
 @click.argument('url')
 @click.option(
-    '--output', '-o',
-    type=click.Path(path_type=Path),
-    help='Output file path. If not specified, prints to stdout.'
-)
-@click.option(
     '--format', '-f',
     type=click.Choice(['text', 'srt', 'vtt']),
     default='text',
@@ -63,13 +58,32 @@ from .core.service import TranscriptionConfig, transcribe_youtube_video
     help='Skip word-level alignment for faster processing'
 )
 @click.option(
+    '--diarize',
+    is_flag=True,
+    help='Enable speaker diarization (requires HF_TOKEN environment variable)'
+)
+@click.option(
+    '--num-speakers',
+    type=int,
+    help='Number of speakers (if known, improves diarization accuracy)'
+)
+@click.option(
+    '--min-speakers',
+    type=int,
+    help='Minimum number of speakers'
+)
+@click.option(
+    '--max-speakers',
+    type=int,
+    help='Maximum number of speakers'
+)
+@click.option(
     '--verbose', '-v',
     is_flag=True,
     help='Enable verbose output'
 )
 def main(
     url: str,
-    output: Optional[Path],
     format: str,
     model: str,
     language: Optional[str],
@@ -79,6 +93,10 @@ def main(
     device: Optional[str],
     compute_type: str,
     no_align: bool,
+    diarize: bool,
+    num_speakers: Optional[int],
+    min_speakers: Optional[int],
+    max_speakers: Optional[int],
     verbose: bool
 ) -> None:
     """Extract transcript from YouTube video.
@@ -101,7 +119,11 @@ def main(
             compute_type=compute_type,
             align=not no_align,
             temp_dir=temp_dir,
-            keep_audio=keep_audio
+            keep_audio=keep_audio,
+            diarize=diarize,
+            num_speakers=num_speakers,
+            min_speakers=min_speakers,
+            max_speakers=max_speakers
         )
         
         if verbose:
@@ -126,12 +148,7 @@ def main(
             transcript = result.transcript_text
         
         # Output result
-        if output:
-            output.write_text(transcript, encoding='utf-8')
-            if verbose:
-                click.echo(f"Transcript saved to: {output}")
-        else:
-            click.echo(transcript)
+        click.echo(transcript)
         
     except KeyboardInterrupt:
         click.echo("\nOperation cancelled by user", err=True)

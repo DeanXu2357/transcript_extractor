@@ -1,4 +1,3 @@
-import os
 import tempfile
 from pathlib import Path
 from typing import Optional, Dict
@@ -196,3 +195,4 @@ class YouTubeDownloader:
                 file_path.unlink()
         except Exception:
             pass  # Ignore cleanup errors
+

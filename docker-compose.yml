@@ -3,10 +3,19 @@ services:
     build: .
     image: transcript-extractor:latest
     volumes:
-      - ./output:/app/output
-      - ./input:/app/input
+      - ${DOWNLOAD_DIR:-./downloads}:/app/downloads
+      - ${MODEL_STORE_DIR:-./models}:/app/models
     environment:
       - PYTHONUNBUFFERED=1
+      - VALKEY_HOST=${VALKEY_HOST:-valkey}
+      - VALKEY_PORT=${VALKEY_PORT:-6379}
+      - VALKEY_DB=${VALKEY_DB:-1}
+      - VALKEY_PASSWORD=${VALKEY_PASSWORD}
+      - VALKEY_USERNAME=${VALKEY_USERNAME}
+      - DOWNLOAD_DIR=/app/downloads
+      - MODEL_STORE_DIR=/app/models
+      - WHISPERX_BATCH_SIZE=${WHISPERX_BATCH_SIZE:-16}
+      - HF_TOKEN=${HF_TOKEN}
     deploy:
       resources:
         reservations:
@@ -14,7 +23,9 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    # Example usage: docker compose run --rm transcript-extractor "https://youtube.com/watch?v=xxx" --format srt --output /app/output/transcript.srt
+    networks:
+      - shared_valkey
+    # Example usage: docker compose run --rm transcript-extractor "https://youtube.com/watch?v=xxx" --format srt
 
   mcp-server:
     build: .
@@ -24,8 +35,8 @@ services:
       - "${MCP_PORT:-8080}:${MCP_PORT:-8080}"
       - "${DEBUG_PORT:-5678}:${DEBUG_PORT:-5678}"
     volumes:
-      - ./output:/app/output
-      - ./input:/app/input
+      - ${DOWNLOAD_DIR:-./downloads}:/app/downloads
+      - ${MODEL_STORE_DIR:-./models}:/app/models
     environment:
       - PYTHONUNBUFFERED=1
       - MCP_TRANSPORT=http
@@ -37,6 +48,16 @@ services:
       - DEBUG_ENABLED=${DEBUG_ENABLED:-false}
       - DEBUG_PORT=${DEBUG_PORT:-5678}
       - DEBUG_WAIT=${DEBUG_WAIT:-false}
+      - VALKEY_HOST=${VALKEY_HOST:-valkey}
+      - VALKEY_PORT=${VALKEY_PORT:-6379}
+      - VALKEY_DB=${VALKEY_DB:-1}
+      - VALKEY_PASSWORD=${VALKEY_PASSWORD}
+      - VALKEY_USERNAME=${VALKEY_USERNAME}
+      - DOWNLOAD_DIR=/app/downloads
+      - MODEL_STORE_DIR=/app/models
+      - WHISPERX_BATCH_SIZE=${WHISPERX_BATCH_SIZE:-16}
+      - WHISPERX_COMPUTE_TYPE=${WHISPERX_COMPUTE_TYPE:-float16}
+      - HF_TOKEN=${HF_TOKEN}
     deploy:
       resources:
         reservations:
@@ -51,11 +72,13 @@ services:
       retries: 3
       start_period: 40s
     networks:
-      services-network:
-        aliases:
-            - mcp-server
+      - shared_valkey
+      - services-network
 
 networks:
-    services-network:
-      external: true
+  shared_valkey:
+    external: true
+    name: shared_valkey
+  services-network:
+    external: true
 
