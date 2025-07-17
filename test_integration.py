@@ -2,8 +2,9 @@
 """Integration tests for core functionality."""
 
 import sys
-import os
 import tempfile
+import os
+import time
 from pathlib import Path
 
 # Add src to path for imports
@@ -16,8 +17,39 @@ from transcript_extractor.core.service import TranscriptionConfig, transcribe_yo
 # Test URLs - using short, safe videos
 TEST_URLS = {
     "short_english": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",  # Rick Roll (short)
-    "with_captions": "https://www.youtube.com/watch?v=jNQXAC9IVRw"   # Short video with captions
+    "with_captions": "https://www.youtube.com/watch?v=jNQXAC9IVRw",   # Short video with captions
+    "whisper_test": "https://www.youtube.com/watch?v=9bZkp7q19f0",    # Different short video for Whisper test
+    "service_test": "https://www.youtube.com/watch?v=hFZFjoX2cGg"      # Different video for service test
 }
+
+# Shared cache directory for all tests
+SHARED_CACHE_DIR = None
+
+def get_shared_cache_dir():
+    """Get or create shared cache directory for all tests."""
+    global SHARED_CACHE_DIR
+    if SHARED_CACHE_DIR is None:
+        SHARED_CACHE_DIR = tempfile.mkdtemp(prefix="transcript_test_cache_")
+    return SHARED_CACHE_DIR
+
+def retry_download(downloader, url, format="wav", max_retries=3, delay=2):
+    """Retry downloading with exponential backoff."""
+    for attempt in range(max_retries):
+        try:
+            print(f"    Download attempt {attempt + 1}/{max_retries}")
+            audio_path = downloader.download_audio(url, format=format)
+            if audio_path and Path(audio_path).exists():
+                return audio_path
+            else:
+                print(f"    ⚠ Attempt {attempt + 1} failed: No file created")
+        except Exception as e:
+            print(f"    ⚠ Attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                wait_time = delay * (2 ** attempt)  # Exponential backoff
+                print(f"    Waiting {wait_time}s before retry...")
+                time.sleep(wait_time)
+    
+    return None
 
 def test_youtube_transcript_download():
     """Test downloading YouTube's built-in transcripts."""
@@ -57,39 +89,35 @@ def test_audio_download():
     """Test downloading audio from YouTube."""
     print("Testing audio download...")
     
-    with tempfile.TemporaryDirectory() as temp_dir:
-        downloader = YouTubeDownloader(output_dir=temp_dir)
+    cache_dir = get_shared_cache_dir()
+    downloader = YouTubeDownloader(output_dir=cache_dir)
+    
+    # Test with shortest URL
+    test_url = TEST_URLS["short_english"]
+    print(f"  Testing audio download: {test_url}")
+    
+    try:
+        # Download audio with retry
+        audio_path = retry_download(downloader, test_url, format="wav")
         
-        # Test with shortest URL
-        test_url = TEST_URLS["short_english"]
-        print(f"  Testing audio download: {test_url}")
-        
-        try:
-            # Download audio
-            audio_path = downloader.download_audio(test_url, format="wav")
+        if audio_path and Path(audio_path).exists():
+            file_size = Path(audio_path).stat().st_size
+            print(f"    ✓ Audio downloaded to: {audio_path}")
+            print(f"    ✓ File size: {file_size} bytes")
             
-            if audio_path and Path(audio_path).exists():
-                file_size = Path(audio_path).stat().st_size
-                print(f"    ✓ Audio downloaded to: {audio_path}")
-                print(f"    ✓ File size: {file_size} bytes")
-                
-                # Basic validation
-                if file_size > 1000:  # At least 1KB
-                    print("    ✓ Audio file has reasonable size")
-                else:
-                    print("    ⚠ Audio file seems too small")
-                    
-                # Cleanup
-                downloader.cleanup(audio_path)
-                if not Path(audio_path).exists():
-                    print("    ✓ Cleanup successful")
-                else:
-                    print("    ⚠ Cleanup failed")
+            # Basic validation
+            if file_size > 1000:  # At least 1KB
+                print("    ✓ Audio file has reasonable size")
             else:
-                print("    ❌ Audio download failed - no file created")
+                print("    ⚠ Audio file seems too small")
                 
-        except Exception as e:
-            print(f"    ❌ Error downloading audio: {e}")
+            # Keep file for subsequent tests (shared cache)
+            print("    ✓ Audio file preserved for subsequent tests")
+        else:
+            print("    ❌ Audio download failed - no file created")
+            
+    except Exception as e:
+        print(f"    ❌ Error downloading audio: {e}")
     
     print("✓ Audio download test completed\n")
 
@@ -97,72 +125,72 @@ def test_whisper_transcription():
     """Test Whisper transcription with actual audio."""
     print("Testing Whisper transcription...")
     
-    with tempfile.TemporaryDirectory() as temp_dir:
-        downloader = YouTubeDownloader(output_dir=temp_dir)
+    cache_dir = get_shared_cache_dir()
+    downloader = YouTubeDownloader(output_dir=cache_dir)
+    
+    # Use different test video to avoid rate limiting
+    test_url = TEST_URLS["whisper_test"]
+    print(f"  Testing transcription: {test_url}")
+    
+    try:
+        # Download audio first with retry
+        print("    Downloading audio...")
+        audio_path = retry_download(downloader, test_url, format="wav")
         
-        # Use shortest test video
-        test_url = TEST_URLS["short_english"]
-        print(f"  Testing transcription: {test_url}")
+        if not audio_path or not Path(audio_path).exists():
+            print("    ❌ Could not download audio for transcription test")
+            return
         
-        try:
-            # Download audio first
-            print("    Downloading audio...")
-            audio_path = downloader.download_audio(test_url, format="wav")
+        print("    Initializing Whisper transcriber...")
+        # Use smallest model for speed
+        transcriber = WhisperTranscriber(
+            model_size="tiny",
+            device="cpu",  # Force CPU for compatibility
+            compute_type="float32"
+        )
+        
+        print("    Running transcription...")
+        # Transcribe with basic settings
+        result = transcriber.transcribe_audio(
+            audio_path,
+            language=None,  # Auto-detect
+        )
+        
+        if result and 'segments' in result:
+            print(f"    ✓ Transcription successful")
+            print(f"    ✓ Detected language: {result.get('language', 'unknown')}")
+            print(f"    ✓ Number of segments: {len(result['segments'])}")
             
-            if not audio_path or not Path(audio_path).exists():
-                print("    ❌ Could not download audio for transcription test")
-                return
+            # Test formatting
+            text_format = transcriber.format_transcript(result, "text")
+            srt_format = transcriber.format_transcript(result, "srt")
+            vtt_format = transcriber.format_transcript(result, "vtt")
             
-            print("    Initializing Whisper transcriber...")
-            # Use smallest model for speed
-            transcriber = WhisperTranscriber(
-                model_size="tiny",
-                device="cpu",  # Force CPU for compatibility
-                compute_type="float32"
-            )
-            
-            print("    Running transcription...")
-            # Transcribe with basic settings
-            result = transcriber.transcribe_audio(
-                audio_path,
-                language=None,  # Auto-detect
-            )
-            
-            if result and 'segments' in result:
-                print(f"    ✓ Transcription successful")
-                print(f"    ✓ Detected language: {result.get('language', 'unknown')}")
-                print(f"    ✓ Number of segments: {len(result['segments'])}")
-                
-                # Test formatting
-                text_format = transcriber.format_transcript(result, "text")
-                srt_format = transcriber.format_transcript(result, "srt")
-                vtt_format = transcriber.format_transcript(result, "vtt")
-                
-                if text_format and len(text_format.strip()) > 0:
-                    print("    ✓ Text format generated")
-                    print(f"      Sample: {text_format[:100]}...")
-                else:
-                    print("    ⚠ Text format is empty")
-                
-                if srt_format and "1\n" in srt_format:
-                    print("    ✓ SRT format generated")
-                else:
-                    print("    ⚠ SRT format invalid")
-                
-                if vtt_format and "WEBVTT" in vtt_format:
-                    print("    ✓ VTT format generated")
-                else:
-                    print("    ⚠ VTT format invalid")
+            if text_format and len(text_format.strip()) > 0:
+                print("    ✓ Text format generated")
+                print(f"      Sample: {text_format[:100]}...")
             else:
-                print("    ❌ Transcription failed - no segments returned")
+                print("    ⚠ Text format is empty")
             
-            # Cleanup
-            downloader.cleanup(audio_path)
+            if srt_format and "1\n" in srt_format:
+                print("    ✓ SRT format generated")
+            else:
+                print("    ⚠ SRT format invalid")
             
-        except Exception as e:
-            print(f"    ❌ Error in transcription: {e}")
-            import traceback
-            traceback.print_exc()
+            if vtt_format and "WEBVTT" in vtt_format:
+                print("    ✓ VTT format generated")
+            else:
+                print("    ⚠ VTT format invalid")
+        else:
+            print("    ❌ Transcription failed - no segments returned")
+        
+        # Keep file for subsequent tests (shared cache)
+        print("    ✓ Audio file preserved for subsequent tests")
+        
+    except Exception as e:
+        print(f"    ❌ Error in transcription: {e}")
+        import traceback
+        traceback.print_exc()
     
     print("✓ Whisper transcription test completed\n")
 
@@ -170,10 +198,10 @@ def test_full_service_integration():
     """Test the full service end-to-end."""
     print("Testing full service integration...")
     
-    with tempfile.TemporaryDirectory() as temp_dir:
+    with tempfile.TemporaryDirectory():
         # Test configuration
         config = TranscriptionConfig(
-            url=TEST_URLS["short_english"],
+            url=TEST_URLS["service_test"],
             model_size="tiny",  # Fastest model
             language=None,      # Auto-detect
             device="cpu",       # Force CPU
@@ -191,7 +219,10 @@ def test_full_service_integration():
             
             if result.success:
                 print("    ✓ Service completed successfully")
-                print(f"    ✓ Detected language: {result.detected_language}")
+                if result.detected_language and result.detected_language != "unknown":
+                    print(f"    ✓ Detected language: {result.detected_language}")
+                else:
+                    print("    ⚠ Language detection failed or unknown")
                 print(f"    ✓ Progress messages: {len(progress_messages)}")
                 
                 # Check outputs
@@ -217,14 +248,41 @@ def test_full_service_integration():
                 else:
                     print("    ⚠ No YouTube transcripts found")
                 
-                # Check audio file
-                if result.audio_path and Path(result.audio_path).exists():
-                    print(f"    ✓ Audio file preserved: {result.audio_path}")
+                # Check raw result structure
+                if result.raw_result and isinstance(result.raw_result, dict):
+                    print(f"    ✓ Raw result available with {len(result.raw_result)} keys")
+                    # Check for expected WhisperX result structure
+                    if "segments" in result.raw_result:
+                        segments = result.raw_result["segments"]
+                        if isinstance(segments, list) and len(segments) > 0:
+                            print(f"    ✓ Raw result contains {len(segments)} segments")
+                        else:
+                            print("    ⚠ Raw result segments empty or invalid")
+                    else:
+                        print("    ⚠ Raw result missing segments")
                 else:
-                    print("    ⚠ Audio file not preserved")
+                    print("    ⚠ Raw result missing or invalid")
                 
             else:
                 print(f"    ❌ Service failed: {result.error_message}")
+                # Validate error result structure
+                if result.error_message and len(result.error_message.strip()) > 0:
+                    print("    ✓ Error message provided")
+                else:
+                    print("    ⚠ Error message missing or empty")
+                    
+                # Check that error result has expected empty values
+                if (result.transcript_text == "" and 
+                    result.transcript_srt == "" and 
+                    result.transcript_vtt == ""):
+                    print("    ✓ Error result has empty transcript fields")
+                else:
+                    print("    ⚠ Error result should have empty transcript fields")
+                    
+                if result.detected_language == "unknown":
+                    print("    ✓ Error result has unknown language")
+                else:
+                    print("    ⚠ Error result should have unknown language")
                 
         except Exception as e:
             print(f"    ❌ Error in full service test: {e}")
@@ -256,6 +314,13 @@ def main():
         import traceback
         traceback.print_exc()
         return 1
+    finally:
+        # Clean up shared cache directory
+        global SHARED_CACHE_DIR
+        if SHARED_CACHE_DIR and os.path.exists(SHARED_CACHE_DIR):
+            import shutil
+            shutil.rmtree(SHARED_CACHE_DIR, ignore_errors=True)
+            print(f"Cleaned up shared cache directory: {SHARED_CACHE_DIR}")
 
 if __name__ == "__main__":
     sys.exit(main())
