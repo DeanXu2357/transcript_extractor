@@ -134,12 +134,6 @@ class WhisperTranscriber:
                     result = whisperx.assign_word_speakers(
                         diarize_segments, result, fill_nearest=False
                     )
-
-                    # Debug output to show structure
-                    print("=== DIARIZE SEGMENTS ===")
-                    print(diarize_segments)
-                    print("\n=== RESULT SEGMENTS WITH SPEAKERS ===")
-                    print(result["segments"])
                 else:
                     raise Exception(
                         "HF_TOKEN environment variable required for speaker diarization"
