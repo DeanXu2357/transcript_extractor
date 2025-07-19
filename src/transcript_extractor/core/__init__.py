@@ -2,13 +2,12 @@
 
 from .downloader import YouTubeDownloader
 from .transcriber import WhisperTranscriber
-from .service import TranscriptionService, TranscriptionConfig, TranscriptionResult, transcribe_youtube_video
+from .service import TranscriptionService, TranscriptionConfig, TranscriptionResult
 
 __all__ = [
-    "YouTubeDownloader", 
-    "WhisperTranscriber", 
-    "TranscriptionService", 
-    "TranscriptionConfig", 
+    "YouTubeDownloader",
+    "WhisperTranscriber",
+    "TranscriptionService",
+    "TranscriptionConfig",
     "TranscriptionResult",
-    "transcribe_youtube_video"
 ]

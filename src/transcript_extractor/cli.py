@@ -3,63 +3,56 @@ from typing import Optional
 
 import click
 
-from .core.service import TranscriptionConfig, transcribe_youtube_video
+from .core.service import TranscriptionConfig, TranscriptionService
 
 
 @click.command()
-@click.argument('url')
+@click.argument("url")
 @click.option(
-    '--format', '-f',
-    type=click.Choice(['text', 'srt', 'vtt']),
-    default='text',
-    help='Output format (default: text)'
+    "--format",
+    "-f",
+    type=click.Choice(["text", "srt", "vtt"]),
+    default="text",
+    help="Output format (default: text)",
 )
 @click.option(
-    '--model', '-m',
-    type=click.Choice(['tiny', 'base', 'small', 'medium', 'large-v2', 'large-v3', 'breeze-asr-25']),
-    default='base',
-    help='What model to use (default: base)'
+    "--model",
+    "-m",
+    type=click.Choice(
+        ["tiny", "base", "small", "medium", "large-v2", "large-v3", "breeze-asr-25"]
+    ),
+    default="base",
+    help="What model to use (default: base)",
 )
 @click.option(
-    '--language', '-l',
-    help='Language code (e.g., zh, en). Auto-detect if not specified.'
+    "--language",
+    "-l",
+    help="Language code (e.g., zh, en). Auto-detect if not specified.",
 )
 @click.option(
-    '--device',
-    type=click.Choice(['cpu', 'cuda'], case_sensitive=False),
-    help='Device to run transcription on (auto-detect if not specified)'
+    "--device",
+    type=click.Choice(["cpu", "cuda"], case_sensitive=False),
+    help="Device to run transcription on (auto-detect if not specified)",
 )
 @click.option(
-    '--compute-type',
-    type=click.Choice(['float16', 'float32', 'int8'], case_sensitive=False),
-    default='float16',
-    help='Compute precision (default: float16)'
+    "--compute-type",
+    type=click.Choice(["float16", "float32", "int8"], case_sensitive=False),
+    default="float16",
+    help="Compute precision (default: float16)",
 )
 @click.option(
-    '--diarize',
+    "--diarize",
     is_flag=True,
-    help='Enable speaker diarization (requires HF_TOKEN environment variable)'
+    help="Enable speaker diarization (requires HF_TOKEN environment variable)",
 )
 @click.option(
-    '--num-speakers',
+    "--num-speakers",
     type=int,
-    help='Number of speakers (if known, improves diarization accuracy)'
+    help="Number of speakers (if known, improves diarization accuracy)",
 )
-@click.option(
-    '--min-speakers',
-    type=int,
-    help='Minimum number of speakers'
-)
-@click.option(
-    '--max-speakers',
-    type=int,
-    help='Maximum number of speakers'
-)
-@click.option(
-    '--verbose', '-v',
-    is_flag=True,
-    help='Enable verbose output'
-)
+@click.option("--min-speakers", type=int, help="Minimum number of speakers")
+@click.option("--max-speakers", type=int, help="Maximum number of speakers")
+@click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
 def main(
     url: str,
     format: str,
@@ -71,10 +64,10 @@ def main(
     num_speakers: Optional[int],
     min_speakers: Optional[int],
     max_speakers: Optional[int],
-    verbose: bool
+    verbose: bool,
 ) -> None:
     """Extract transcript from YouTube video.
-    
+
     URL: YouTube video URL to transcribe
     """
     try:
@@ -82,7 +75,7 @@ def main(
         def progress_callback(message: str) -> None:
             if verbose:
                 click.echo(message)
-        
+
         # Create configuration
         config = TranscriptionConfig(
             url=url,
@@ -93,20 +86,20 @@ def main(
             diarize=diarize,
             num_speakers=num_speakers,
             min_speakers=min_speakers,
-            max_speakers=max_speakers
+            max_speakers=max_speakers,
         )
-        
+
         if verbose:
             click.echo(f"Output format: {format}")
-        
-        # Run transcription
-        result = transcribe_youtube_video(config, progress_callback)
-        
+
+        service = TranscriptionService()
+        result = service.transcribe_youtube_video(config, progress_callback)
+
         # Check for errors
         if not result.success:
             click.echo(f"Error: {result.error_message}", err=True)
             sys.exit(1)
-        
+
         # Get transcript in requested format
         if format == "text":
             transcript = result.transcript_text
@@ -116,14 +109,14 @@ def main(
             transcript = result.transcript_vtt
         else:
             transcript = result.transcript_text
-        
+
         # Output result
         click.echo(transcript)
-        
+
     except KeyboardInterrupt:
         click.echo("\nOperation cancelled by user", err=True)
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

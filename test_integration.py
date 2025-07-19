@@ -11,7 +11,7 @@ sys.path.insert(0, '/app/src')
 
 from transcript_extractor.core.downloader import YouTubeDownloader
 from transcript_extractor.core.transcriber import WhisperTranscriber
-from transcript_extractor.core.service import TranscriptionConfig, transcribe_youtube_video
+from transcript_extractor.core.service import TranscriptionConfig, TranscriptionService
 
 # Test URLs - using short, safe videos
 TEST_URLS = {
@@ -145,7 +145,7 @@ def test_whisper_transcription():
         print("    Initializing Whisper transcriber...")
         # Use smallest model for speed, with system defaults
         transcriber = WhisperTranscriber(
-            model_size="tiny"
+            model_name="tiny"
         )
         
         print("    Running transcription...")
@@ -201,7 +201,7 @@ def test_full_service_integration():
         # Test configuration with system defaults
         config = TranscriptionConfig(
             url=TEST_URLS["service_test"],
-            model_size="tiny",  # Fastest model
+            model_name="tiny",  # Fastest model
             language=None,      # Auto-detect
         )
         
@@ -212,7 +212,8 @@ def test_full_service_integration():
         
         try:
             print("  Running full transcription service...")
-            result = transcribe_youtube_video(config, progress_callback)
+            service = TranscriptionService()
+            result = service.transcribe_youtube_video(config, progress_callback)
             
             if result.success:
                 print("    ✓ Service completed successfully")

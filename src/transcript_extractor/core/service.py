@@ -71,37 +71,40 @@ class TranscriptionService:
             self.cache_service = None
 
     def transcribe_youtube_video(
-        self, config: TranscriptionConfig
+        self,
+        config: TranscriptionConfig,
+        progress_callback: Optional[Callable[[str], None]] = None,
     ) -> TranscriptionResult:
         """Transcribe a YouTube video.
 
         Args:
             config: Transcription configuration
+            progress_callback: Optional callback for progress updates (overrides instance callback)
 
         Returns:
             TranscriptionResult containing all formats and metadata
         """
+        callback = progress_callback or self.progress_callback
+
         try:
-            self.progress_callback(f"Using download directory: {self.download_dir}")
-            self.progress_callback(f"Model: {config.model_name}")
-            self.progress_callback(f"Language: {config.language or 'auto-detect'}")
+            callback(f"Using download directory: {self.download_dir}")
+            callback(f"Model: {config.model_name}")
+            callback(f"Language: {config.language or 'auto-detect'}")
 
             # Get YouTube transcripts first
-            self.progress_callback("Fetching YouTube transcripts...")
+            callback("Fetching YouTube transcripts...")
             youtube_transcripts = self.downloader.get_youtube_transcripts(config.url)
             if youtube_transcripts:
-                self.progress_callback(
+                callback(
                     f"Found YouTube transcripts in {len(youtube_transcripts)} languages"
                 )
             else:
-                self.progress_callback("No YouTube transcripts available")
+                callback("No YouTube transcripts available")
 
             # Download audio
-            self.progress_callback("Downloading audio...")
-            audio_path = self.downloader.download_audio(
-                config.url, format="wav"
-            )
-            self.progress_callback(f"Audio downloaded to: {audio_path}")
+            callback("Downloading audio...")
+            audio_path = self.downloader.download_audio(config.url, format="wav")
+            callback(f"Audio downloaded to: {audio_path}")
 
             # Initialize transcriber
             transcriber = WhisperTranscriber(
@@ -112,18 +115,18 @@ class TranscriptionService:
             )
 
             # Transcribe audio
-            self.progress_callback("Loading model and transcribing...")
+            callback("Loading model and transcribing...")
             raw_result = transcriber.transcribe_audio(
-                audio_path, 
-                language=config.language, 
+                audio_path,
+                language=config.language,
                 diarize=config.diarize,
                 num_speakers=config.num_speakers,
                 min_speakers=config.min_speakers,
-                max_speakers=config.max_speakers
+                max_speakers=config.max_speakers,
             )
 
             detected_language = raw_result.get("language", "unknown")
-            self.progress_callback(f"Detected language: {detected_language}")
+            callback(f"Detected language: {detected_language}")
 
             # Generate all formats
             transcript_text = transcriber.format_transcript(
@@ -157,20 +160,3 @@ class TranscriptionService:
                 success=False,
                 error_message=str(e),
             )
-
-
-def transcribe_youtube_video(
-    config: TranscriptionConfig,
-    progress_callback: Optional[Callable[[str], None]] = None,
-) -> TranscriptionResult:
-    """Convenience function for transcribing YouTube videos.
-
-    Args:
-        config: Transcription configuration
-        progress_callback: Optional callback for progress updates
-
-    Returns:
-        TranscriptionResult containing all formats and metadata
-    """
-    service = TranscriptionService(progress_callback)
-    return service.transcribe_youtube_video(config)
