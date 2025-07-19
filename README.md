@@ -121,6 +121,20 @@ uv run transcript-extractor "https://youtube.com/watch?v=VIDEO_ID"
 uv run transcript-extractor-mcp
 ```
 
+## Known Issues
+
+### 1. Breeze ASR-25 Model Timestamp Inaccuracy
+The Breeze ASR-25 model (specialized for Mandarin-English code-switching) produces incorrect timestamps in output formats (SRT/VTT). This is caused by our project's parsing and formatting logic when processing the model's output, not a limitation of the model itself. The timing accuracy issues affect subtitle file generation.
+
+### 2. VRAM Memory Management
+To prevent VRAM memory leaks from accumulating across multiple transcription requests, the system automatically clears GPU memory cache after each transcription. This may cause the following side effects:
+
+- **Concurrent Request Risk**: If multiple transcription requests are running simultaneously, memory cleanup from one request may interfere with others
+- **Performance Impact**: Models need to be reloaded more frequently, affecting overall throughput
+- **Recommendation**: For production environments with concurrent usage, consider implementing request queuing or using separate instances
+
+This trade-off prioritizes memory stability over concurrent performance. Future versions may implement more sophisticated memory management strategies.
+
 ---
 
 *This is a personal side project that integrates multiple excellent open-source tools to meet daily video transcription needs.*

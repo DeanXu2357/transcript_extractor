@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Dict, Optional, Union
+import gc
 import whisperx
 import torch
 
@@ -138,6 +139,19 @@ class WhisperTranscriber(BaseTranscriber):
 
         except Exception as e:
             raise Exception(f"Failed to transcribe audio {audio_path}: {str(e)}")
+        finally:
+            # Clean up GPU memory to prevent VRAM leaks
+            if 'model' in locals():
+                del model
+            if 'align_model' in locals():
+                del align_model
+            if 'diarize_model' in locals():
+                del diarize_model
+            
+            # Force garbage collection and clear CUDA cache
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
     def format_transcript(self, result: Dict, format_type: str = "text") -> str:
         """Format transcription result.
