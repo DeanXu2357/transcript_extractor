@@ -30,6 +30,8 @@ services:
       - WHISPERX_BATCH_SIZE=${WHISPERX_BATCH_SIZE:-16}
       - WHISPERX_COMPUTE_TYPE=${WHISPERX_COMPUTE_TYPE:-float16}
       - HF_TOKEN=${HF_TOKEN}
+      - MCP_DEVICE=${MCP_DEVICE:-cuda}
+      - MCP_COMPUTE_TYPE=${MCP_COMPUTE_TYPE:-float16}
     deploy:
       resources:
         reservations:

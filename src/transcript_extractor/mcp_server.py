@@ -4,7 +4,6 @@
 import asyncio
 import logging
 import os
-from functools import wraps
 from typing import Any, Optional
 
 import debugpy
@@ -20,7 +19,8 @@ import uvicorn
 import traceback
 import time
 
-from .core.service import TranscriptionConfig, transcribe_youtube_video
+from .core.service import TranscriptionConfig, TranscriptionService
+from .core.constants import ALL_MODELS, BREEZE_MODEL
 
 # Environment variable constants
 ENV_MAX_WHISPER_MODEL = "MAX_WHISPER_MODEL"
@@ -29,11 +29,12 @@ ENV_MCP_TRANSPORT = "MCP_TRANSPORT"
 ENV_MCP_HOST = "MCP_HOST"
 ENV_MCP_PORT = "MCP_PORT"
 ENV_MCP_JWT_AUDIENCE = "MCP_JWT_AUDIENCE"
+ENV_MCP_DEVICE = "MCP_DEVICE"
+ENV_MCP_COMPUTE_TYPE = "MCP_COMPUTE_TYPE"
 
 # Transport constants
 TRANSPORT_STDIO = "stdio"
 TRANSPORT_HTTP = "http"
-
 
 # OAuth2 scope constants
 SCOPE_OPENID = "openid"
@@ -41,7 +42,6 @@ SCOPE_OFFLINE = "offline"
 SCOPE_TRANSCRIPT_READ = "transcript:read"
 SCOPE_TRANSCRIPT_REALTIME = "transcript:realtime"
 
-# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("transcript-extractor-mcp")
 
@@ -51,14 +51,12 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         start_time = time.time()
 
-        # Log request information
         logger.info("=== MCP Request Start ===")
         logger.info(f"Method: {request.method}")
         logger.info(f"URL: {request.url}")
         logger.info(f"Headers: {dict(request.headers)}")
         logger.info(f"Client: {request.client}")
 
-        # Record call stack
         stack = traceback.extract_stack()
         logger.info("=== Call Stack Before Response ===")
         for frame in stack[-10:]:  # Only show last 10 frames
@@ -68,7 +66,6 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
 
-        # Log response information
         processing_time = time.time() - start_time
         logger.info(f"=== MCP Request End ===")
         logger.info(f"Status: {response.status_code}")
@@ -78,12 +75,11 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         return response
 
 
-# Create MCP server
 mcp = FastMCP("transcript-extractor", stateless_http=True)
 
 # Server hardware limits configuration
-MODEL_HIERARCHY = ["tiny", "base", "small", "medium", "large-v2", "large-v3", "breeze-asr-25"]
-MAX_MODEL = os.getenv(ENV_MAX_WHISPER_MODEL, "large-v3")  # Default to allow all models
+MODEL_HIERARCHY = ALL_MODELS
+MAX_MODEL = os.getenv(ENV_MAX_WHISPER_MODEL, "large-v3")
 
 
 def get_max_model_index():
@@ -98,10 +94,15 @@ def get_max_model_index():
 def validate_model_request(requested_model: str) -> tuple[str, bool]:
     """
     Validate if the requested model is within server hardware limits.
+    Breeze ASR 25 bypasses hardware limits.
 
     Returns:
         tuple: (actual_model_to_use, is_downgraded)
     """
+    # Breeze ASR 25 bypasses hardware limits
+    if requested_model == BREEZE_MODEL:
+        return requested_model, False
+
     max_index = get_max_model_index()
 
     try:
@@ -120,12 +121,23 @@ def validate_model_request(requested_model: str) -> tuple[str, bool]:
         return downgraded_model, True
 
 
-# Log server configuration at startup
 logger.info(f"Server maximum model: {MAX_MODEL}")
 logger.info(f"Available models: {MODEL_HIERARCHY[:get_max_model_index() + 1]}")
 
 
-# Initialize MCP Auth
+_transcription_service: Optional[TranscriptionService] = None
+
+
+def get_transcription_service() -> TranscriptionService:
+    """Get the transcription service instance."""
+    if _transcription_service is None:
+        raise RuntimeError(
+            "TranscriptionService not initialized. "
+            "This should not happen - service should be initialized in main()."
+        )
+    return _transcription_service
+
+
 def init_mcp_auth():
     """Initialize MCP Auth with OIDC configuration."""
     auth_server_url = os.getenv(ENV_AUTH_SERVER_URL, "http://localhost:4444")
@@ -142,65 +154,9 @@ def init_mcp_auth():
         return None
 
 
-# Initialize auth (optional)
 mcp_auth = init_mcp_auth()
 
 
-def require_scope(required_scope: str):
-    """
-    Decorator to check if the current authenticated user has the required OAuth2 scope.
-
-    Args:
-        required_scope: The OAuth2 scope required to access this tool
-
-    Returns:
-        Decorator function that checks scope before executing the tool
-    """
-
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            # If no authentication is configured, allow access (for CLI mode)
-            if not mcp_auth:
-                logger.info(
-                    f"No authentication configured, allowing access to {func.__name__}"
-                )
-                return func(*args, **kwargs)
-
-            # Access auth_info during request execution (per-request context)
-            auth_info = mcp_auth.auth_info
-            if not auth_info:
-                logger.warning(f"No authentication info available for {func.__name__}")
-                return {
-                    "success": False,
-                    "error": "Authentication required",
-                    "required_scope": required_scope,
-                }
-
-            # Check if user has the required scope
-            user_scopes = auth_info.claims.get("scope", "").split()
-            if required_scope not in user_scopes:
-                logger.warning(
-                    f"Access denied to {func.__name__}: required scope '{required_scope}' not found in user scopes: {user_scopes}"
-                )
-                return {
-                    "success": False,
-                    "error": f"Insufficient permissions. Required scope: {required_scope}",
-                    "required_scope": required_scope,
-                    "user_scopes": user_scopes,
-                }
-
-            logger.info(
-                f"Access granted to {func.__name__}: user has required scope '{required_scope}'"
-            )
-            return func(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
-# @require_scope(SCOPE_TRANSCRIPT_REALTIME)
 @mcp.tool()
 def extract_youtube_transcript(
     url: str,
@@ -237,16 +193,13 @@ def extract_youtube_transcript(
         }
     """
     try:
-        # Check authentication if mcp_auth is available
         if mcp_auth and mcp_auth.auth_info:
             logger.info(
                 f"Authenticated request from: {mcp_auth.auth_info.claims.get('sub', 'unknown')}"
             )
 
-        # Validate and potentially downgrade model based on server limits
         actual_model, was_downgraded = validate_model_request(model)
 
-        # Create configuration
         config = TranscriptionConfig(
             url=url,
             model_name=actual_model,  # Use validated model
@@ -254,7 +207,6 @@ def extract_youtube_transcript(
             diarize=diarize,
         )
 
-        # Progress callback
         progress_messages = []
         start_time = __import__("time").time()
 
@@ -262,7 +214,6 @@ def extract_youtube_transcript(
             progress_messages.append(message)
             logger.info(message)
 
-        # Log client's model choice and server decision
         progress_callback(f"Client requested model: {model}")
         if was_downgraded:
             progress_callback(
@@ -272,8 +223,9 @@ def extract_youtube_transcript(
             progress_callback(f"✅ Using requested model: {actual_model}")
         progress_callback("Starting transcription...")
 
-        # Run transcription
-        result = transcribe_youtube_video(config, progress_callback)
+        result = get_transcription_service().transcribe_youtube_video(
+            config, progress_callback
+        )
 
         if not result.success:
             return {
@@ -282,17 +234,14 @@ def extract_youtube_transcript(
                 "progress": progress_messages,
             }
 
-        # Calculate processing time
         processing_time = __import__("time").time() - start_time
 
-        # Return result based on requested format
         transcript_data = {
             "text": result.transcript_text,
             "srt": result.transcript_srt,
             "vtt": result.transcript_vtt,
         }
 
-        # Echo client parameters for transparency
         client_params = {
             "requested_model": model,
             "language": language,
@@ -300,7 +249,6 @@ def extract_youtube_transcript(
             "diarize": diarize,
         }
 
-        # Server decision information
         server_info = {
             "max_allowed_model": MAX_MODEL,
             "available_models": MODEL_HIERARCHY[: get_max_model_index() + 1],
@@ -331,7 +279,6 @@ def extract_youtube_transcript(
         return {"success": False, "error": str(e)}
 
 
-# @require_scope(SCOPE_TRANSCRIPT_READ)
 @mcp.tool()
 def get_youtube_transcripts(url: str) -> dict[str, Any]:
     """Get existing YouTube transcripts without audio processing.
@@ -359,7 +306,6 @@ def get_youtube_transcripts(url: str) -> dict[str, Any]:
         return {"success": False, "error": str(e), "transcripts": {}, "languages": []}
 
 
-# @require_scope(SCOPE_TRANSCRIPT_READ)
 @mcp.tool()
 def list_whisper_models() -> dict[str, Any]:
     """List available Whisper models.
@@ -389,17 +335,15 @@ def list_whisper_models() -> dict[str, Any]:
             "accuracy": "Excellent",
         },
         "large-v3": {
-            "speed": "Very Slow", 
+            "speed": "Very Slow",
             "accuracy": "Best",
         },
     }
 
-    # Filter models based on server hardware limits
     max_index = get_max_model_index()
     available_models = {
         k: v for i, (k, v) in enumerate(models.items()) if i <= max_index
     }
-
 
     return {
         "available_models": list(available_models.keys()),
@@ -410,7 +354,17 @@ def list_whisper_models() -> dict[str, Any]:
 
 async def main():
     """Run the MCP server with optional authentication."""
-    # Initialize debugpy for remote debugging
+    global _transcription_service
+
+    def service_progress_callback(message: str) -> None:
+        logger.info(f"Service: {message}")
+
+    _transcription_service = TranscriptionService(
+        progress_callback=service_progress_callback,
+        device=os.getenv(ENV_MCP_DEVICE),
+        compute_type=os.getenv(ENV_MCP_COMPUTE_TYPE, "float16"),
+    )
+
     debug_port = int(os.getenv("DEBUG_PORT", "5678"))
     if os.getenv("DEBUG_ENABLED", "false").lower() == "true":
         debugpy.listen(("0.0.0.0", debug_port))
@@ -431,7 +385,7 @@ async def main():
         from starlette.responses import JSONResponse
         from starlette.routing import Route
 
-        async def health_check(request):
+        async def health_check(_request):
             return JSONResponse({"status": "ok", "service": "transcript-extractor-mcp"})
 
         if mcp_auth:
@@ -439,7 +393,7 @@ async def main():
 
             bearer_auth_params = {
                 # "audience": os.getenv(ENV_MCP_JWT_AUDIENCE, "transcript-extractor"),
-                "required_scopes": None,  # Handle scopes per-tool
+                "required_scopes": None,
                 "leeway": 60,
                 "show_error_details": True,  # Enable detailed error information
             }
@@ -448,7 +402,6 @@ async def main():
                 mcp_auth.bearer_auth_middleware("jwt", **bearer_auth_params)
             )
 
-            # Create MCP app with proper lifespan management
             mcp_app = mcp.streamable_http_app()
             logger.info(f"MCP app type: {type(mcp_app)}")
 
@@ -479,7 +432,6 @@ async def main():
                 "HTTP transport mode requires MCP Auth configuration. Authentication failed to initialize."
             )
 
-        # Run server
         config = uvicorn.Config(app, host=host, port=port, log_level="info")
         server = uvicorn.Server(config)
         await server.serve()

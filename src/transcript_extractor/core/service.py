@@ -5,7 +5,10 @@ from dataclasses import dataclass
 
 from .downloader import YouTubeDownloader
 from .transcriber import WhisperTranscriber
+from .breeze_transcriber import BreezeTranscriber
 from .cache import CacheService, with_cache
+from .constants import WHISPER_MODELS, BREEZE_MODEL
+from .base_transcriber import BaseTranscriber
 
 
 @dataclass
@@ -32,9 +35,7 @@ class TranscriptionResult:
     transcript_vtt: str
     raw_result: Dict[str, Any]
     detected_language: str
-    youtube_transcripts: Dict[
-        str, str
-    ]  # Language code -> transcript content from YouTube
+    youtube_transcripts: Dict[str, str]
     success: bool = True
     error_message: Optional[str] = None
 
@@ -42,13 +43,23 @@ class TranscriptionResult:
 class TranscriptionService:
     """Core transcription service that handles YouTube download and transcription."""
 
-    def __init__(self, progress_callback: Optional[Callable[[str], None]] = None):
+    def __init__(
+        self,
+        progress_callback: Optional[Callable[[str], None]] = None,
+        device: Optional[str] = None,
+        compute_type: str = "float16",
+    ):
         """Initialize the service.
 
         Args:
             progress_callback: Optional callback function for progress updates
+            device: Device to run transcription on (auto-detect if None)
+            compute_type: Compute precision for transcription models
         """
         self.progress_callback = progress_callback or (lambda _: None)
+
+        self.device = device
+        self.compute_type = compute_type
 
         self.download_dir = Path(os.getenv("DOWNLOAD_DIR", "./downloads"))
         self.download_dir.mkdir(parents=True, exist_ok=True)
@@ -70,62 +81,88 @@ class TranscriptionService:
             self.progress_callback(f"Warning: Cache service unavailable: {e}")
             self.cache_service = None
 
+        self.transcribers: Dict[str, BaseTranscriber] = {}
+        self._initialize_transcribers()
+
+    def _initialize_transcribers(self):
+        """Initialize all supported transcriber instances."""
+        self.progress_callback("Initializing transcriber instances...")
+        self.progress_callback(f"System device: {self.device or 'auto-detect'}")
+        self.progress_callback(f"System compute_type: {self.compute_type}")
+
+        try:
+            for model_name in WHISPER_MODELS:
+                self.transcribers[model_name] = WhisperTranscriber(
+                    model_name="base",
+                    device=self.device,
+                    compute_type=self.compute_type,
+                    model_store_dir=self.model_store_dir,
+                )
+                self.progress_callback(
+                    f"Initialized shared WhisperX transcriber for models: {WHISPER_MODELS}"
+                )
+
+            self.transcribers[BREEZE_MODEL] = BreezeTranscriber(
+                device=self.device,
+                model_store_dir=self.model_store_dir,
+            )
+            self.progress_callback(f"Initialized Breeze transcriber: {BREEZE_MODEL}")
+        except Exception as e:
+            self.progress_callback(f"Failed to initialize Breeze transcriber: {e}")
+
+        self.progress_callback(
+            f"Initialized transcriber instances for {len(set(self.transcribers.values()))} unique transcribers"
+        )
+
     def transcribe_youtube_video(
-        self, config: TranscriptionConfig
+        self,
+        config: TranscriptionConfig,
+        progress_callback: Optional[Callable[[str], None]] = None,
     ) -> TranscriptionResult:
         """Transcribe a YouTube video.
 
         Args:
             config: Transcription configuration
+            progress_callback: Optional callback for progress updates (overrides instance callback)
 
         Returns:
             TranscriptionResult containing all formats and metadata
         """
-        try:
-            self.progress_callback(f"Using download directory: {self.download_dir}")
-            self.progress_callback(f"Model: {config.model_name}")
-            self.progress_callback(f"Language: {config.language or 'auto-detect'}")
+        callback = progress_callback or self.progress_callback
 
-            # Get YouTube transcripts first
-            self.progress_callback("Fetching YouTube transcripts...")
+        try:
+            callback(f"Using download directory: {self.download_dir}")
+            callback(f"Model: {config.model_name}")
+            callback(f"Language: {config.language or 'auto-detect'}")
+
+            callback("Fetching YouTube transcripts...")
             youtube_transcripts = self.downloader.get_youtube_transcripts(config.url)
             if youtube_transcripts:
-                self.progress_callback(
+                callback(
                     f"Found YouTube transcripts in {len(youtube_transcripts)} languages"
                 )
             else:
-                self.progress_callback("No YouTube transcripts available")
+                callback("No YouTube transcripts available")
 
-            # Download audio
-            self.progress_callback("Downloading audio...")
-            audio_path = self.downloader.download_audio(
-                config.url, format="wav"
-            )
-            self.progress_callback(f"Audio downloaded to: {audio_path}")
+            callback("Downloading audio...")
+            audio_path = self.downloader.download_audio(config.url, format="wav")
+            callback(f"Audio downloaded to: {audio_path}")
 
-            # Initialize transcriber
-            transcriber = WhisperTranscriber(
-                model_name=config.model_name,
-                device=config.device,
-                compute_type=config.compute_type,
-                model_store_dir=self.model_store_dir,
-            )
+            transcriber = self._get_transcriber(config)
 
-            # Transcribe audio
-            self.progress_callback("Loading model and transcribing...")
+            callback("Loading model and transcribing...")
             raw_result = transcriber.transcribe_audio(
-                audio_path, 
-                language=config.language, 
+                audio_path,
+                language=config.language,
                 diarize=config.diarize,
                 num_speakers=config.num_speakers,
                 min_speakers=config.min_speakers,
-                max_speakers=config.max_speakers
+                max_speakers=config.max_speakers,
             )
 
             detected_language = raw_result.get("language", "unknown")
-            self.progress_callback(f"Detected language: {detected_language}")
+            callback(f"Detected language: {detected_language}")
 
-            # Generate all formats
             transcript_text = transcriber.format_transcript(
                 raw_result, format_type="text"
             )
@@ -158,19 +195,23 @@ class TranscriptionService:
                 error_message=str(e),
             )
 
+    def _get_transcriber(self, config: TranscriptionConfig) -> BaseTranscriber:
+        """Get the appropriate transcriber instance based on model name.
 
-def transcribe_youtube_video(
-    config: TranscriptionConfig,
-    progress_callback: Optional[Callable[[str], None]] = None,
-) -> TranscriptionResult:
-    """Convenience function for transcribing YouTube videos.
+        Args:
+            config: Transcription configuration
 
-    Args:
-        config: Transcription configuration
-        progress_callback: Optional callback for progress updates
+        Returns:
+            Pre-initialized transcriber instance
 
-    Returns:
-        TranscriptionResult containing all formats and metadata
-    """
-    service = TranscriptionService(progress_callback)
-    return service.transcribe_youtube_video(config)
+        Raises:
+            ValueError: If the requested model is not available
+        """
+        if config.model_name not in self.transcribers:
+            available_models = list(self.transcribers.keys())
+            raise ValueError(
+                f"Model '{config.model_name}' not available. "
+                f"Available models: {', '.join(available_models)}"
+            )
+
+        return self.transcribers[config.model_name]
