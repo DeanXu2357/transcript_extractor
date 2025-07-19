@@ -320,7 +320,6 @@ def extract_youtube_transcript(
             "model_requested": model,  # What client requested
             "processing_time": round(processing_time, 2),
             "youtube_transcripts": result.youtube_transcripts,
-            "audio_path": str(result.audio_path) if result.audio_path else None,
             "progress": progress_messages,
             "all_formats": transcript_data,
             "client_params": client_params,
