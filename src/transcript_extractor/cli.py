@@ -4,6 +4,7 @@ from typing import Optional
 import click
 
 from .core.service import TranscriptionConfig, TranscriptionService
+from .core.constants import ALL_MODELS
 
 
 @click.command()
@@ -18,9 +19,7 @@ from .core.service import TranscriptionConfig, TranscriptionService
 @click.option(
     "--model",
     "-m",
-    type=click.Choice(
-        ["tiny", "base", "small", "medium", "large-v2", "large-v3", "breeze-asr-25"]
-    ),
+    type=click.Choice(ALL_MODELS),
     default="base",
     help="What model to use (default: base)",
 )

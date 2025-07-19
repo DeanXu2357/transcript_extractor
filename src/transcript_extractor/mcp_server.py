@@ -4,7 +4,6 @@
 import asyncio
 import logging
 import os
-from functools import wraps
 from typing import Any, Optional
 
 import debugpy
@@ -21,6 +20,7 @@ import traceback
 import time
 
 from .core.service import TranscriptionConfig, TranscriptionService
+from .core.constants import ALL_MODELS, BREEZE_MODEL
 
 # Environment variable constants
 ENV_MAX_WHISPER_MODEL = "MAX_WHISPER_MODEL"
@@ -78,15 +78,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 mcp = FastMCP("transcript-extractor", stateless_http=True)
 
 # Server hardware limits configuration
-MODEL_HIERARCHY = [
-    "tiny",
-    "base",
-    "small",
-    "medium",
-    "large-v2",
-    "large-v3",
-    "breeze-asr-25",
-]
+MODEL_HIERARCHY = ALL_MODELS
 MAX_MODEL = os.getenv(ENV_MAX_WHISPER_MODEL, "large-v3")
 
 
@@ -102,10 +94,15 @@ def get_max_model_index():
 def validate_model_request(requested_model: str) -> tuple[str, bool]:
     """
     Validate if the requested model is within server hardware limits.
+    Breeze ASR 25 bypasses hardware limits.
 
     Returns:
         tuple: (actual_model_to_use, is_downgraded)
     """
+    # Breeze ASR 25 bypasses hardware limits
+    if requested_model == BREEZE_MODEL:
+        return requested_model, False
+        
     max_index = get_max_model_index()
 
     try:

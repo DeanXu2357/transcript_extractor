@@ -5,7 +5,10 @@ from dataclasses import dataclass
 
 from .downloader import YouTubeDownloader
 from .transcriber import WhisperTranscriber
+from .breeze_transcriber import BreezeTranscriber
 from .cache import CacheService, with_cache
+from .constants import is_breeze_model
+from .base_transcriber import BaseTranscriber
 
 
 @dataclass
@@ -106,13 +109,7 @@ class TranscriptionService:
             audio_path = self.downloader.download_audio(config.url, format="wav")
             callback(f"Audio downloaded to: {audio_path}")
 
-            # Initialize transcriber
-            transcriber = WhisperTranscriber(
-                model_name=config.model_name,
-                device=config.device,
-                compute_type=config.compute_type,
-                model_store_dir=self.model_store_dir,
-            )
+            transcriber = self._create_transcriber(config)
 
             # Transcribe audio
             callback("Loading model and transcribing...")
@@ -159,4 +156,26 @@ class TranscriptionService:
                 youtube_transcripts={},
                 success=False,
                 error_message=str(e),
+            )
+
+    def _create_transcriber(self, config: TranscriptionConfig) -> BaseTranscriber:
+        """Create the appropriate transcriber based on model name.
+
+        Args:
+            config: Transcription configuration
+
+        Returns:
+            Configured transcriber instance
+        """
+        if is_breeze_model(config.model_name):
+            return BreezeTranscriber(
+                device=config.device,
+                model_store_dir=self.model_store_dir,
+            )
+        else:
+            return WhisperTranscriber(
+                model_name=config.model_name,
+                device=config.device,
+                compute_type=config.compute_type,
+                model_store_dir=self.model_store_dir,
             )
