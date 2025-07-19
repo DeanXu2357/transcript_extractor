@@ -90,7 +90,13 @@ class BreezeTranscriber(BaseTranscriber):
                     text = chunk.get("text", "").strip()
 
                     # Skip empty chunks or invalid timestamps
-                    if text and timestamp[0] < timestamp[1]:
+                    # Check for None values in timestamp before comparison
+                    if (text and 
+                        timestamp and 
+                        len(timestamp) >= 2 and 
+                        timestamp[0] is not None and 
+                        timestamp[1] is not None and 
+                        timestamp[0] < timestamp[1]):
                         segments.append(
                             {"start": timestamp[0], "end": timestamp[1], "text": text}
                         )
