@@ -29,11 +29,12 @@ ENV_MCP_TRANSPORT = "MCP_TRANSPORT"
 ENV_MCP_HOST = "MCP_HOST"
 ENV_MCP_PORT = "MCP_PORT"
 ENV_MCP_JWT_AUDIENCE = "MCP_JWT_AUDIENCE"
+ENV_MCP_DEVICE = "MCP_DEVICE"
+ENV_MCP_COMPUTE_TYPE = "MCP_COMPUTE_TYPE"
 
 # Transport constants
 TRANSPORT_STDIO = "stdio"
 TRANSPORT_HTTP = "http"
-
 
 # OAuth2 scope constants
 SCOPE_OPENID = "openid"
@@ -41,7 +42,6 @@ SCOPE_OFFLINE = "offline"
 SCOPE_TRANSCRIPT_READ = "transcript:read"
 SCOPE_TRANSCRIPT_REALTIME = "transcript:realtime"
 
-# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("transcript-extractor-mcp")
 
@@ -102,7 +102,7 @@ def validate_model_request(requested_model: str) -> tuple[str, bool]:
     # Breeze ASR 25 bypasses hardware limits
     if requested_model == BREEZE_MODEL:
         return requested_model, False
-        
+
     max_index = get_max_model_index()
 
     try:
@@ -138,7 +138,6 @@ def get_transcription_service() -> TranscriptionService:
     return _transcription_service
 
 
-# Initialize MCP Auth
 def init_mcp_auth():
     """Initialize MCP Auth with OIDC configuration."""
     auth_server_url = os.getenv(ENV_AUTH_SERVER_URL, "http://localhost:4444")
@@ -199,10 +198,8 @@ def extract_youtube_transcript(
                 f"Authenticated request from: {mcp_auth.auth_info.claims.get('sub', 'unknown')}"
             )
 
-        # Validate and potentially downgrade model based on server limits
         actual_model, was_downgraded = validate_model_request(model)
 
-        # Create configuration
         config = TranscriptionConfig(
             url=url,
             model_name=actual_model,  # Use validated model
@@ -362,9 +359,12 @@ async def main():
     def service_progress_callback(message: str) -> None:
         logger.info(f"Service: {message}")
 
-    _transcription_service = TranscriptionService(service_progress_callback)
+    _transcription_service = TranscriptionService(
+        progress_callback=service_progress_callback,
+        device=os.getenv(ENV_MCP_DEVICE),
+        compute_type=os.getenv(ENV_MCP_COMPUTE_TYPE, "float16"),
+    )
 
-    # Initialize debugpy for remote debugging
     debug_port = int(os.getenv("DEBUG_PORT", "5678"))
     if os.getenv("DEBUG_ENABLED", "false").lower() == "true":
         debugpy.listen(("0.0.0.0", debug_port))
@@ -393,7 +393,7 @@ async def main():
 
             bearer_auth_params = {
                 # "audience": os.getenv(ENV_MCP_JWT_AUDIENCE, "transcript-extractor"),
-                "required_scopes": None,  # Handle scopes per-tool
+                "required_scopes": None,
                 "leeway": 60,
                 "show_error_details": True,  # Enable detailed error information
             }
@@ -432,7 +432,6 @@ async def main():
                 "HTTP transport mode requires MCP Auth configuration. Authentication failed to initialize."
             )
 
-        # Run server
         config = uvicorn.Config(app, host=host, port=port, log_level="info")
         server = uvicorn.Server(config)
         await server.serve()

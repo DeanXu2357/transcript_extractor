@@ -48,85 +48,97 @@ class BreezeTranscriber(BaseTranscriber):
             Exception: If transcription fails
         """
         try:
-            from transformers import WhisperProcessor, WhisperForConditionalGeneration, AutomaticSpeechRecognitionPipeline
+            from transformers import (
+                WhisperProcessor,
+                WhisperForConditionalGeneration,
+                AutomaticSpeechRecognitionPipeline,
+            )
             import librosa
-            
-            # Load Breeze ASR 25 model with caching
+            import gc
+
             model_name = "MediaTek-Research/Breeze-ASR-25"
             breeze_cache_dir = self.model_store_dir / "breeze-asr-25"
             breeze_cache_dir.mkdir(parents=True, exist_ok=True)
-            
+
             processor = WhisperProcessor.from_pretrained(
-                model_name, 
-                cache_dir=str(breeze_cache_dir)
+                model_name, cache_dir=str(breeze_cache_dir)
             )
             model = WhisperForConditionalGeneration.from_pretrained(
-                model_name, 
-                cache_dir=str(breeze_cache_dir)
+                model_name, cache_dir=str(breeze_cache_dir)
             )
             model.to(self.device)
             model.eval()
-            
-            # Load and preprocess audio
+
             audio, _ = librosa.load(str(audio_path), sr=16000)
-            
-            # Create ASR pipeline for long audio processing
+
             asr_pipeline = AutomaticSpeechRecognitionPipeline(
                 model=model,
                 tokenizer=processor.tokenizer,
                 feature_extractor=processor.feature_extractor,
                 chunk_length_s=0,  # Allows processing of long audio files
-                device=self.device
+                device=self.device,
             )
-            
+
             # Perform transcription with timestamps
             output = asr_pipeline(audio, return_timestamps=True)
             transcription = output["text"]
-            
-            # Convert to WhisperX-compatible format using chunks
+
             if "chunks" in output and output["chunks"]:
-                # Process chunks with timestamps
                 segments = []
                 for chunk in output["chunks"]:
                     timestamp = chunk.get("timestamp", (0.0, 0.0))
                     text = chunk.get("text", "").strip()
-                    
+
                     # Skip empty chunks or invalid timestamps
                     if text and timestamp[0] < timestamp[1]:
-                        segments.append({
-                            "start": timestamp[0],
-                            "end": timestamp[1],
-                            "text": text
-                        })
-                
-                result = {
-                    "segments": segments,
-                    "language": language or "zh"
-                }
+                        segments.append(
+                            {"start": timestamp[0], "end": timestamp[1], "text": text}
+                        )
+
+                result = {"segments": segments, "language": language or "zh"}
             else:
-                # Fallback to single segment
                 result = {
-                    "segments": [{
-                        "text": transcription
-                    }],
-                    "language": language or "zh"
+                    "segments": [{"text": transcription}],
+                    "language": language or "zh",
                 }
-            
+
             # Speaker diarization is not supported with Breeze ASR 25
             # due to lack of word-level timestamps
             if diarize:
                 import warnings
+
                 warnings.warn(
                     "Speaker diarization is not supported with Breeze ASR 25 due to lack of word-level timestamps. "
                     "Please use a WhisperX model (tiny, base, small, medium, large-v2, large-v3) for diarization. "
                     "Continuing without diarization...",
-                    UserWarning
+                    UserWarning,
                 )
-            
+
             return result
-            
+
         except Exception as e:
-            raise Exception(f"Failed to transcribe audio with Breeze ASR 25 {audio_path}: {str(e)}")
+            raise Exception(
+                f"Failed to transcribe audio with Breeze ASR 25 {audio_path}: {str(e)}"
+            )
+        finally:
+            # Manually clean up memory resources. The frameworks  may not immediately release GPU memory after use.
+            # This explicit cleanup is necessary to prevent memory leaks or out-of-memory
+            # errors, especially when processing multiple files in a sequence.
+            if "asr_pipeline" in locals():
+                del asr_pipeline
+            if "model" in locals():
+                del model
+            if "processor" in locals():
+                del processor
+
+            # Trigger Python's garbage collector to reclaim memory from the deleted objects.
+            gc.collect()
+
+            # If using a GPU, clear the CUDA cache to free up unused memory held by PyTorch.
+            if self.device.startswith("cuda"):
+                import torch  # Ensure torch is imported here if not already
+
+                torch.cuda.empty_cache()
 
     def format_transcript(self, result: Dict, format_type: str = "text") -> str:
         """Format transcription result.
@@ -203,4 +215,3 @@ class BreezeTranscriber(BaseTranscriber):
                 return self._format_text(result)
 
         return "\n".join(vtt_content)
-

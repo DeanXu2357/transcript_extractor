@@ -7,7 +7,7 @@ from .downloader import YouTubeDownloader
 from .transcriber import WhisperTranscriber
 from .breeze_transcriber import BreezeTranscriber
 from .cache import CacheService, with_cache
-from .constants import is_breeze_model
+from .constants import WHISPER_MODELS, BREEZE_MODEL
 from .base_transcriber import BaseTranscriber
 
 
@@ -35,9 +35,7 @@ class TranscriptionResult:
     transcript_vtt: str
     raw_result: Dict[str, Any]
     detected_language: str
-    youtube_transcripts: Dict[
-        str, str
-    ]  # Language code -> transcript content from YouTube
+    youtube_transcripts: Dict[str, str]
     success: bool = True
     error_message: Optional[str] = None
 
@@ -45,13 +43,23 @@ class TranscriptionResult:
 class TranscriptionService:
     """Core transcription service that handles YouTube download and transcription."""
 
-    def __init__(self, progress_callback: Optional[Callable[[str], None]] = None):
+    def __init__(
+        self,
+        progress_callback: Optional[Callable[[str], None]] = None,
+        device: Optional[str] = None,
+        compute_type: str = "float16",
+    ):
         """Initialize the service.
 
         Args:
             progress_callback: Optional callback function for progress updates
+            device: Device to run transcription on (auto-detect if None)
+            compute_type: Compute precision for transcription models
         """
         self.progress_callback = progress_callback or (lambda _: None)
+
+        self.device = device
+        self.compute_type = compute_type
 
         self.download_dir = Path(os.getenv("DOWNLOAD_DIR", "./downloads"))
         self.download_dir.mkdir(parents=True, exist_ok=True)
@@ -72,6 +80,39 @@ class TranscriptionService:
         except Exception as e:
             self.progress_callback(f"Warning: Cache service unavailable: {e}")
             self.cache_service = None
+
+        self.transcribers: Dict[str, BaseTranscriber] = {}
+        self._initialize_transcribers()
+
+    def _initialize_transcribers(self):
+        """Initialize all supported transcriber instances."""
+        self.progress_callback("Initializing transcriber instances...")
+        self.progress_callback(f"System device: {self.device or 'auto-detect'}")
+        self.progress_callback(f"System compute_type: {self.compute_type}")
+
+        try:
+            for model_name in WHISPER_MODELS:
+                self.transcribers[model_name] = WhisperTranscriber(
+                    model_name="base",
+                    device=self.device,
+                    compute_type=self.compute_type,
+                    model_store_dir=self.model_store_dir,
+                )
+                self.progress_callback(
+                    f"Initialized shared WhisperX transcriber for models: {WHISPER_MODELS}"
+                )
+
+            self.transcribers[BREEZE_MODEL] = BreezeTranscriber(
+                device=self.device,
+                model_store_dir=self.model_store_dir,
+            )
+            self.progress_callback(f"Initialized Breeze transcriber: {BREEZE_MODEL}")
+        except Exception as e:
+            self.progress_callback(f"Failed to initialize Breeze transcriber: {e}")
+
+        self.progress_callback(
+            f"Initialized transcriber instances for {len(set(self.transcribers.values()))} unique transcribers"
+        )
 
     def transcribe_youtube_video(
         self,
@@ -94,7 +135,6 @@ class TranscriptionService:
             callback(f"Model: {config.model_name}")
             callback(f"Language: {config.language or 'auto-detect'}")
 
-            # Get YouTube transcripts first
             callback("Fetching YouTube transcripts...")
             youtube_transcripts = self.downloader.get_youtube_transcripts(config.url)
             if youtube_transcripts:
@@ -104,14 +144,12 @@ class TranscriptionService:
             else:
                 callback("No YouTube transcripts available")
 
-            # Download audio
             callback("Downloading audio...")
             audio_path = self.downloader.download_audio(config.url, format="wav")
             callback(f"Audio downloaded to: {audio_path}")
 
-            transcriber = self._create_transcriber(config)
+            transcriber = self._get_transcriber(config)
 
-            # Transcribe audio
             callback("Loading model and transcribing...")
             raw_result = transcriber.transcribe_audio(
                 audio_path,
@@ -125,7 +163,6 @@ class TranscriptionService:
             detected_language = raw_result.get("language", "unknown")
             callback(f"Detected language: {detected_language}")
 
-            # Generate all formats
             transcript_text = transcriber.format_transcript(
                 raw_result, format_type="text"
             )
@@ -158,24 +195,23 @@ class TranscriptionService:
                 error_message=str(e),
             )
 
-    def _create_transcriber(self, config: TranscriptionConfig) -> BaseTranscriber:
-        """Create the appropriate transcriber based on model name.
+    def _get_transcriber(self, config: TranscriptionConfig) -> BaseTranscriber:
+        """Get the appropriate transcriber instance based on model name.
 
         Args:
             config: Transcription configuration
 
         Returns:
-            Configured transcriber instance
+            Pre-initialized transcriber instance
+
+        Raises:
+            ValueError: If the requested model is not available
         """
-        if is_breeze_model(config.model_name):
-            return BreezeTranscriber(
-                device=config.device,
-                model_store_dir=self.model_store_dir,
+        if config.model_name not in self.transcribers:
+            available_models = list(self.transcribers.keys())
+            raise ValueError(
+                f"Model '{config.model_name}' not available. "
+                f"Available models: {', '.join(available_models)}"
             )
-        else:
-            return WhisperTranscriber(
-                model_name=config.model_name,
-                device=config.device,
-                compute_type=config.compute_type,
-                model_store_dir=self.model_store_dir,
-            )
+
+        return self.transcribers[config.model_name]

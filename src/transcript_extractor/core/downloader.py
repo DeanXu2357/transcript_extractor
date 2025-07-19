@@ -53,7 +53,6 @@ class YouTubeDownloader:
                 safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()
                 audio_path = self.output_dir / f"{safe_title}.{format}"
                 
-                # Update template with cleaned title
                 ydl_opts['outtmpl'] = str(self.output_dir / f"{safe_title}.%(ext)s")
                 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl_download:
@@ -83,19 +82,16 @@ class YouTubeDownloader:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 
-                # Get both manual and automatic subtitles
                 subtitles = info.get('subtitles', {})
                 automatic_captions = info.get('automatic_captions', {})
                 
                 transcripts = {}
                 
-                # Process manual subtitles first (higher priority)
                 for lang, sub_list in subtitles.items():
                     content = self._download_subtitle_content(sub_list)
                     if content:
                         transcripts[lang] = content
                 
-                # Process automatic captions for languages not in manual subtitles
                 for lang, sub_list in automatic_captions.items():
                     if lang not in transcripts:  # Don't override manual subtitles
                         content = self._download_subtitle_content(sub_list)
@@ -105,7 +101,7 @@ class YouTubeDownloader:
                 return transcripts
                 
         except Exception:
-            return {}  # Return empty dict if anything fails
+            return {}
     
     def _download_subtitle_content(self, sub_list: list) -> str:
         """Download and parse subtitle content from subtitle info list.
@@ -122,7 +118,6 @@ class YouTubeDownloader:
                 if sub.get('ext') == 'vtt':
                     return self._fetch_and_parse_subtitle(sub['url'])
             
-            # If no VTT, try other formats
             for sub in sub_list:
                 if 'url' in sub:
                     return self._fetch_and_parse_subtitle(sub['url'])
@@ -174,9 +169,8 @@ class YouTubeDownloader:
                 not line.isdigit() and
                 not re.match(r'^\d+$', line)):  # Skip SRT sequence numbers
                 
-                # Remove HTML tags and formatting
                 clean_line = re.sub(r'<[^>]+>', '', line)
-                clean_line = re.sub(r'&[a-zA-Z]+;', '', clean_line)  # Remove HTML entities
+                clean_line = re.sub(r'&[a-zA-Z]+;', '', clean_line)
                 clean_line = clean_line.strip()
                 
                 if clean_line:

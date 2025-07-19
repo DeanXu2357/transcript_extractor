@@ -34,11 +34,9 @@ class WhisperTranscriber(BaseTranscriber):
         self.batch_size = int(os.getenv("WHISPERX_BATCH_SIZE", "16"))
         self.compute_type = os.getenv("WHISPERX_COMPUTE_TYPE", compute_type)
 
-        # Create whisper cache directory
         self.whisper_cache_dir = self.model_store_dir / "whisperx"
         self.whisper_cache_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create alignment cache directory
         self.alignment_cache_dir = self.model_store_dir / "alignment"
         self.alignment_cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -74,7 +72,6 @@ class WhisperTranscriber(BaseTranscriber):
             Exception: If transcription fails
         """
         try:
-            # Load WhisperX model
             model = whisperx.load_model(
                 self.model_name,
                 self.device,
@@ -82,13 +79,11 @@ class WhisperTranscriber(BaseTranscriber):
                 download_root=str(self.whisper_cache_dir),
             )
 
-            # Load and transcribe audio
             audio = whisperx.load_audio(str(audio_path))
             result = model.transcribe(
                 audio, batch_size=self.batch_size, language=language
             )
 
-            # Load alignment model and align output
             align_model, metadata = whisperx.load_align_model(
                 language_code=result["language"],
                 device=self.device,
@@ -169,7 +164,6 @@ class WhisperTranscriber(BaseTranscriber):
         lines = []
 
         for segment in segments:
-            # Check if words have speaker information
             words = segment.get("words", [])
             if words and any("speaker" in word for word in words):
                 # Group words by speaker
@@ -212,7 +206,6 @@ class WhisperTranscriber(BaseTranscriber):
         subtitle_index = 1
 
         for segment in segments:
-            # Check if words have speaker information
             words = segment.get("words", [])
             if words and any("speaker" in word for word in words):
                 # Group words by speaker within the segment
@@ -279,7 +272,6 @@ class WhisperTranscriber(BaseTranscriber):
         vtt_content = ["WEBVTT", ""]
 
         for segment in segments:
-            # Check if words have speaker information
             words = segment.get("words", [])
             if words and any("speaker" in word for word in words):
                 # Group words by speaker within the segment

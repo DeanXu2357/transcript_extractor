@@ -70,12 +70,11 @@ def main(
     URL: YouTube video URL to transcribe
     """
     try:
-        # Create progress callback for verbose output
+
         def progress_callback(message: str) -> None:
             if verbose:
                 click.echo(message)
 
-        # Create configuration
         config = TranscriptionConfig(
             url=url,
             model_name=model,
@@ -91,15 +90,13 @@ def main(
         if verbose:
             click.echo(f"Output format: {format}")
 
-        service = TranscriptionService()
+        service = TranscriptionService(device=device, compute_type=compute_type)
         result = service.transcribe_youtube_video(config, progress_callback)
 
-        # Check for errors
         if not result.success:
             click.echo(f"Error: {result.error_message}", err=True)
             sys.exit(1)
 
-        # Get transcript in requested format
         if format == "text":
             transcript = result.transcript_text
         elif format == "srt":

@@ -49,18 +49,15 @@ class CacheService:
         url_key = self._get_url_key(url)
         meta_key = self._get_metadata_key(url)
         
-        # Get the file path
         file_path = self.redis_client.get(url_key)
         if not file_path:
             return None
         
-        # Check if file still exists
         if not os.path.exists(file_path):
             # File was deleted, remove from cache
             self.remove_cached_file(url)
             return None
         
-        # Get metadata
         metadata = self.redis_client.hgetall(meta_key)
         
         return {
@@ -88,7 +85,6 @@ class CacheService:
         if metadata:
             self.redis_client.hset(meta_key, mapping=metadata)
         
-        # Set expiration (optional - 30 days)
         self.redis_client.expire(url_key, 30 * 24 * 60 * 60)
         self.redis_client.expire(meta_key, 30 * 24 * 60 * 60)
     
@@ -126,19 +122,16 @@ def with_cache(cache_service: Optional[CacheService] = None, progress_callback: 
             if progress_callback:
                 progress_callback("Checking cache for URL...")
             
-            # Check cache first
             cached_result = cache_service.get_cached_file(url)
             if cached_result:
                 if progress_callback:
                     progress_callback(f"Found cached file: {cached_result['file_path']}")
                 
-                # Return cached file path directly (same as download_audio return type)
                 return Path(cached_result['file_path'])
             
             if progress_callback:
                 progress_callback("No cached file found, downloading...")
             
-            # Execute original download_audio function
             result = func(url, format)
             
             # Cache the result
