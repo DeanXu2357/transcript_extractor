@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from .downloader import YouTubeDownloader
 from .transcriber import WhisperTranscriber
 from .breeze_transcriber import BreezeTranscriber
-from .cache import CacheService, with_cache
+from .cache import CacheService, with_cache, with_caption_cache
 from .constants import WHISPER_MODELS, BREEZE_MODEL
 from .base_transcriber import BaseTranscriber
 
@@ -76,6 +76,12 @@ class TranscriptionService:
                 cache_service=self.cache_service,
                 progress_callback=self.progress_callback,
             )(self.downloader.download_audio)
+
+            self.downloader.get_youtube_transcripts = with_caption_cache(
+                cache_service=self.cache_service,
+                progress_callback=self.progress_callback,
+            )(self.downloader.get_youtube_transcripts)
+
             self.progress_callback("Cache service initialized successfully")
         except Exception as e:
             self.progress_callback(f"Warning: Cache service unavailable: {e}")
